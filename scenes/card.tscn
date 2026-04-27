@@ -1,0 +1,67 @@
+[gd_scene format=3 uid="uid://coet3ivux0gs8"]
+
+[ext_resource type="Script" uid="uid://bxa4abx3qmbr1" path="res://scripts/card.gd" id="1_card"]
+[ext_resource type="Texture2D" uid="uid://fx52p2jj2p2k" path="res://icon.svg" id="2_6u4wf"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_body"]
+bg_color = Color(0.95, 0.92, 0.82, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.15, 0.12, 0.08, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="LabelSettings" id="LabelSettings_6u4wf"]
+line_spacing = -5.0
+font_size = 13
+font_color = Color(0, 0, 0, 1)
+
+[node name="Card" type="Node2D" unique_id=1984242006]
+script = ExtResource("1_card")
+
+[node name="Body" type="Panel" parent="." unique_id=230992740]
+offset_left = -60.0
+offset_top = -84.0
+offset_right = 60.0
+offset_bottom = 84.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_body")
+
+[node name="NameLabel" type="Label" parent="Body" unique_id=236591173]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 1.0
+offset_right = 110.0
+offset_bottom = 27.0
+theme_override_colors/font_color = Color(0.1, 0.08, 0.05, 1)
+theme_override_font_sizes/font_size = 18
+text = "Strike"
+
+[node name="NameLabel2" type="Label" parent="Body" unique_id=294952074]
+layout_mode = 0
+offset_left = 10.0
+offset_top = 94.0
+offset_right = 109.0
+offset_bottom = 151.0
+theme_override_colors/font_color = Color(0.1, 0.08, 0.05, 1)
+theme_override_constants/line_spacing = 0
+theme_override_font_sizes/font_size = 18
+text = "Deal 6 damage"
+label_settings = SubResource("LabelSettings_6u4wf")
+autowrap_mode = 3
+
+[node name="CostIcons" type="Control" parent="Body" unique_id=1503156429]
+anchors_preset = 0
+offset_top = -10.0
+offset_right = 120.0
+offset_bottom = 18.0
+mouse_filter = 2
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=2052605753]
+position = Vector2(0, -26.000002)
+scale = Vector2(0.765625, 0.51562494)
+texture = ExtResource("2_6u4wf")

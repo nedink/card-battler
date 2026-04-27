@@ -1,0 +1,49 @@
+[gd_scene format=3 uid="uid://boxlmuoy5w441"]
+
+[ext_resource type="Script" path="res://scripts/event_card.gd" id="1_ec"]
+
+[sub_resource type="StyleBoxFlat" id="SB_event"]
+bg_color = Color(0.4, 0.15, 0.2, 0.95)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(1, 0.55, 0.4, 1)
+corner_radius_top_left = 10
+corner_radius_top_right = 10
+corner_radius_bottom_right = 10
+corner_radius_bottom_left = 10
+
+[node name="EventCard" type="Node2D"]
+script = ExtResource("1_ec")
+
+[node name="Body" type="Panel" parent="."]
+offset_left = -260.0
+offset_top = 0.0
+offset_right = 260.0
+offset_bottom = 90.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("SB_event")
+
+[node name="Title" type="Label" parent="Body"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 8.0
+offset_right = 508.0
+offset_bottom = 36.0
+theme_override_colors/font_color = Color(1, 0.95, 0.7, 1)
+theme_override_font_sizes/font_size = 22
+text = "Event"
+horizontal_alignment = 1
+
+[node name="Description" type="Label" parent="Body"]
+layout_mode = 0
+offset_left = 12.0
+offset_top = 40.0
+offset_right = 508.0
+offset_bottom = 82.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 14
+text = "Description"
+horizontal_alignment = 1
+autowrap_mode = 3

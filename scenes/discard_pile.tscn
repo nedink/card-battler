@@ -1,0 +1,54 @@
+[gd_scene format=3 uid="uid://discardpile001"]
+
+[ext_resource type="Script" path="res://scripts/discard_pile.gd" id="1_discard"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_discard"]
+bg_color = Color(0.32, 0.18, 0.18, 1)
+border_width_left = 3
+border_width_top = 3
+border_width_right = 3
+border_width_bottom = 3
+border_color = Color(0.95, 0.55, 0.45, 1)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[sub_resource type="RectangleShape2D" id="Shape_click"]
+size = Vector2(120, 168)
+
+[node name="DiscardPile" type="Node2D"]
+script = ExtResource("1_discard")
+
+[node name="Body" type="Panel" parent="."]
+offset_left = -60.0
+offset_top = -84.0
+offset_right = 60.0
+offset_bottom = 84.0
+mouse_filter = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_discard")
+
+[node name="TitleLabel" type="Label" parent="Body"]
+offset_left = 10.0
+offset_top = 8.0
+offset_right = 110.0
+offset_bottom = 32.0
+mouse_filter = 2
+text = "DISCARD"
+theme_override_colors/font_color = Color(1, 0.88, 0.82, 1)
+theme_override_font_sizes/font_size = 16
+
+[node name="CountLabel" type="Label" parent="Body"]
+offset_top = 60.0
+offset_right = 120.0
+offset_bottom = 110.0
+mouse_filter = 2
+text = "0"
+horizontal_alignment = 1
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 36
+
+[node name="ClickArea" type="Area2D" parent="."]
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="ClickArea"]
+shape = SubResource("Shape_click")

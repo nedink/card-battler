@@ -1,0 +1,121 @@
+[gd_scene format=3 uid="uid://fe4pe2jksqwn"]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/hand.gd" id="2_hand"]
+[ext_resource type="PackedScene" path="res://scenes/deck.tscn" id="3_deck_scene"]
+[ext_resource type="PackedScene" path="res://scenes/discard_pile.tscn" id="4_discard_scene"]
+[ext_resource type="PackedScene" path="res://scenes/play_space.tscn" id="5_play_space"]
+[ext_resource type="PackedScene" path="res://scenes/hud.tscn" id="6_hud"]
+[ext_resource type="PackedScene" path="res://scenes/event_card.tscn" id="7_event"]
+[ext_resource type="PackedScene" path="res://scenes/exile_pile.tscn" id="8_exile"]
+[ext_resource type="PackedScene" path="res://scenes/pile_viewer.tscn" id="9_pv"]
+
+[sub_resource type="Curve2D" id="Curve2D_hand"]
+_data = {
+"points": PackedVector2Array(-39.33333, 6.666666, 0, 0, -350, 0, -245, 0, 245, 0, 0, -60, 0, 0, 147, 24, 350, 0)
+}
+point_count = 3
+
+[sub_resource type="StyleBoxFlat" id="SB_endbtn"]
+bg_color = Color(0.2, 0.45, 0.65, 1)
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+border_color = Color(0.55, 0.85, 1, 1)
+corner_radius_top_left = 6
+corner_radius_top_right = 6
+corner_radius_bottom_right = 6
+corner_radius_bottom_left = 6
+
+[node name="Main" type="Node2D"]
+script = ExtResource("1_main")
+
+[node name="Background" type="ColorRect" parent="."]
+z_index = -10
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 2
+color = Color(0.07, 0.08, 0.12, 1)
+
+[node name="Hud" parent="." instance=ExtResource("6_hud")]
+
+[node name="EndTurnButton" type="Button" parent="."]
+offset_left = 1100.0
+offset_top = 6.0
+offset_right = 1260.0
+offset_bottom = 34.0
+theme_override_font_sizes/font_size = 14
+theme_override_styles/normal = SubResource("SB_endbtn")
+text = "End Turn (SPACE)"
+
+[node name="EventCard" parent="." instance=ExtResource("7_event")]
+position = Vector2(640, 0)
+
+[node name="PlaySpace" parent="." instance=ExtResource("5_play_space")]
+
+[node name="PlanetDeck" parent="." instance=ExtResource("3_deck_scene")]
+position = Vector2(1180, 130)
+
+[node name="PlayerDeck" parent="." instance=ExtResource("3_deck_scene")]
+position = Vector2(80, 620)
+
+[node name="DiscardPile" parent="." instance=ExtResource("4_discard_scene")]
+position = Vector2(1080, 620)
+
+[node name="ExilePile" parent="." instance=ExtResource("8_exile")]
+position = Vector2(1210, 620)
+
+[node name="Hand" type="Node2D" parent="."]
+position = Vector2(640, 640)
+script = ExtResource("2_hand")
+
+[node name="Path2D" type="Path2D" parent="Hand"]
+curve = SubResource("Curve2D_hand")
+
+[node name="Instructions" type="Label" parent="."]
+offset_left = 20.0
+offset_top = 50.0
+offset_right = 1060.0
+offset_bottom = 70.0
+theme_override_colors/font_color = Color(0.85, 0.85, 0.95, 1)
+theme_override_font_sizes/font_size = 13
+text = "Drag a Build card onto a planet. Drag Discover/Trade Route up. Click any pile to view. SPACE: end turn. ESC: cancel/close."
+
+[node name="SelectionOverlay" type="ColorRect" parent="."]
+visible = false
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 1
+color = Color(0, 0, 0, 0.35)
+
+[node name="SelectionLabel" type="Label" parent="SelectionOverlay"]
+offset_left = 0.0
+offset_top = 80.0
+offset_right = 1280.0
+offset_bottom = 110.0
+theme_override_colors/font_color = Color(1, 1, 1, 1)
+theme_override_font_sizes/font_size = 22
+text = "Select 2 planets to connect (Esc to cancel)"
+horizontal_alignment = 1
+
+[node name="PileViewer" parent="." instance=ExtResource("9_pv")]
+
+[node name="GameOverOverlay" type="ColorRect" parent="."]
+visible = false
+z_index = 2000
+offset_right = 1280.0
+offset_bottom = 720.0
+mouse_filter = 1
+color = Color(0, 0, 0, 0.75)
+
+[node name="GameOverLabel" type="Label" parent="GameOverOverlay"]
+offset_left = 0.0
+offset_top = 280.0
+offset_right = 1280.0
+offset_bottom = 440.0
+theme_override_colors/font_color = Color(1, 0.95, 0.6, 1)
+theme_override_font_sizes/font_size = 36
+text = "GAME OVER"
+horizontal_alignment = 1
+vertical_alignment = 1
