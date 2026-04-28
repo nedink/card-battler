@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="PlanetLibrary" load_steps=11 format=3]
+
+[ext_resource type="Script" path="res://scripts/planet_library.gd" id="1"]
+[ext_resource type="Resource" path="res://data/planets/arid_prime.tres" id="2"]
+[ext_resource type="Resource" path="res://data/planets/dustfall.tres" id="3"]
+[ext_resource type="Resource" path="res://data/planets/ironreach.tres" id="4"]
+[ext_resource type="Resource" path="res://data/planets/aquara.tres" id="5"]
+[ext_resource type="Resource" path="res://data/planets/tides_end.tres" id="6"]
+[ext_resource type="Resource" path="res://data/planets/glacius.tres" id="7"]
+[ext_resource type="Resource" path="res://data/planets/frostmere.tres" id="8"]
+[ext_resource type="Resource" path="res://data/planets/velmara.tres" id="9"]
+[ext_resource type="Resource" path="res://data/planets/stormveil.tres" id="10"]
+
+[resource]
+script = ExtResource("1")
+planets = Array[PlanetDef]([ExtResource("2"), ExtResource("3"), ExtResource("4"), ExtResource("5"), ExtResource("6"), ExtResource("7"), ExtResource("8"), ExtResource("9"), ExtResource("10")])

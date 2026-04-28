@@ -9,6 +9,8 @@ const SETTLE_SPEED := 14.0
 
 # Logical kind of card. Drives both UI badge color and how main.gd dispatches
 # the play action (BUILD_* targets a planet, DISCOVER and TRADE_ROUTE don't).
+# DO NOT reorder — values are stored as ints in player_deck and in the
+# data/cards/*.tres CardData resources.
 enum CardType { DISCOVER, BUILD_COLONY, BUILD_FACTORY, BUILD_LAB, BUILD_POWER_PLANT, TRADE_ROUTE }
 
 # Tinted gold border drawn on the planet currently under the cursor while a

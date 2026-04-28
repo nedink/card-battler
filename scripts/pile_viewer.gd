@@ -11,19 +11,21 @@ signal dismissed
 
 const CARD_SCENE := preload("res://scenes/card.tscn")
 
-# Mini-card layout constants. Card SIZE is 120×168; at 0.7 scale that's 84×118.
+# Mini-card layout constants. Card.SIZE is the unscaled body extent; CARD_SCALE
+# shrinks the rendered card so a full pile fits in the panel grid.
 const CARD_SCALE := 0.7
-const CARD_W := 120.0 * CARD_SCALE
-const CARD_H := 168.0 * CARD_SCALE
+const CARD_W := Card.SIZE.x * CARD_SCALE
+const CARD_H := Card.SIZE.y * CARD_SCALE
+# Gaps follow the card aspect ratio so horizontal/vertical breathing room reads
+# consistently regardless of scale.
 const GAP_X := 14.0
-const GAP_Y := 18.0
+const GAP_Y := GAP_X * (Card.SIZE.y / Card.SIZE.x)
 const CARDS_PER_ROW := 9
 
-# Panel inner content layout. The panel is anchored via offsets in the scene;
-# these are inner offsets within the panel for laying out the grid.
-const PANEL_INNER_LEFT := 24.0
-const PANEL_INNER_TOP_TITLE := 16.0
-const PANEL_GRID_TOP := 64.0       # Below the title row.
+# Panel inner content layout. PANEL_GRID_TOP leaves room for the title row;
+# the grid is then vertically centred within the remaining space.
+const PANEL_GRID_TOP := 64.0
+const PANEL_GRID_BOTTOM_PAD := 24.0
 
 @onready var _backdrop: ColorRect = $Backdrop
 @onready var _panel: Panel = $Panel
@@ -38,9 +40,9 @@ func _ready() -> void:
 func is_open() -> bool:
 	return visible
 
-# `entries` is an Array of Dictionaries with the same shape as main.gd's
-# CARD_DEFS values, plus a "type" key holding the Card.CardType int. The
-# caller assembles them so this script doesn't have to know about CARD_DEFS.
+# `entries` is an Array of Dictionaries with keys {name, type, cost, resource,
+# body}, where "type" is the Card.CardType int. main.gd assembles them from
+# CARD_LIBRARY so this script doesn't have to know about CardData.
 func show_pile(title: String, entries: Array) -> void:
 	_title.text = title
 	for c in _cards_root.get_children():
@@ -54,6 +56,12 @@ func show_pile(title: String, entries: Array) -> void:
 		var sorted := entries.duplicate()
 		sorted.sort_custom(func(a, b): return String(a.get("name", "")) < String(b.get("name", "")))
 		var panel_w: float = _panel.size.x
+		var panel_h: float = _panel.size.y
+		var rows: int = int(ceil(float(sorted.size()) / float(CARDS_PER_ROW)))
+		# Vertically centre the grid within the area below the title.
+		var grid_h: float = float(rows) * CARD_H + float(maxi(rows - 1, 0)) * GAP_Y
+		var grid_avail_h: float = panel_h - PANEL_GRID_TOP - PANEL_GRID_BOTTOM_PAD
+		var y_off: float = PANEL_GRID_TOP + maxf((grid_avail_h - grid_h) * 0.5, 0.0)
 		for i in range(sorted.size()):
 			var def: Dictionary = sorted[i]
 			var card: Card = CARD_SCENE.instantiate()
@@ -71,11 +79,12 @@ func show_pile(title: String, entries: Array) -> void:
 			var row_count: int = mini(sorted.size() - row * CARDS_PER_ROW, CARDS_PER_ROW)
 			var row_width: float = float(row_count) * CARD_W + float(row_count - 1) * GAP_X
 			var x_off: float = (panel_w - row_width) * 0.5
-			# Card.position is its centre (Card is a Node2D with Body offsets ±60/±84
-			# baked in), so add half-card to the top-left of each cell.
+			# Card's origin is its centre (Body offsets are ±SIZE/2), so the cell's
+			# top-left at (x_off + col*step, y_off + row*step) plus half-card lands
+			# the centre at the right spot regardless of CARD_SCALE.
 			card.position = Vector2(
 				x_off + float(col) * (CARD_W + GAP_X) + CARD_W * 0.5,
-				PANEL_GRID_TOP + float(row) * (CARD_H + GAP_Y) + CARD_H * 0.5)
+				y_off + float(row) * (CARD_H + GAP_Y) + CARD_H * 0.5)
 	visible = true
 
 func hide_viewer() -> void:

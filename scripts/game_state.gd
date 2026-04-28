@@ -80,7 +80,7 @@ var energy: int = 0:
 var planets: Array = []                # Array[PlanetData]
 var trade_routes: Array = []           # Array[TradeRouteData]
 # Card stores hold card_type enum values (ints) — the visual + cost for each
-# is rebuilt from main.gd's CARD_DEFS at draw time.
+# is rebuilt from main.gd's CARD_LIBRARY (data/card_library.tres) at draw time.
 var player_deck: Array = []            # Cards waiting to be drawn
 var player_discard: Array = []         # Cards played that recycle into the deck
 var player_exile: Array = []           # Cards played that are removed from the game (Discover)

@@ -14,7 +14,7 @@ const CARD_BACK_SCENE := preload("res://scenes/card_back.tscn")
 
 const TIME_SCALE := 1.0
 
-const TURN_DRAW_COUNT := 3
+const TURN_DRAW_COUNT := 5
 const DRAW_STAGGER_SEC := 0.12
 const DISCARD_STAGGER_SEC := 0.06
 
@@ -38,41 +38,9 @@ const EVENT_CHANCE := 0.5
 # Score weights.
 # score = turn_number * total_buildings_placed
 
-# Card type → (base cost, body text). Resource is "credits" except trade route.
-# `var` rather than `const` so the dict can reference `Card.CardType.*` —
-# external-class enum members aren't always valid const expressions.
-var CARD_DEFS := {
-	Card.CardType.DISCOVER: {
-		"name": "Discover",
-		"cost": 2, "resource": "credits",
-		"body": "Reveal a new planet."
-	},
-	Card.CardType.BUILD_COLONY: {
-		"name": "Build Colony",
-		"cost": 3, "resource": "credits",
-		"body": "+1 Credits/turn on target planet."
-	},
-	Card.CardType.BUILD_FACTORY: {
-		"name": "Build Factory",
-		"cost": 2, "resource": "credits",
-		"body": "+2 Credits, -1 Energy on target planet."
-	},
-	Card.CardType.BUILD_LAB: {
-		"name": "Build Lab",
-		"cost": 2, "resource": "credits",
-		"body": "+1 Research/turn on target planet."
-	},
-	Card.CardType.BUILD_POWER_PLANT: {
-		"name": "Build Power Plant",
-		"cost": 3, "resource": "credits",
-		"body": "+2 Energy/turn on target planet."
-	},
-	Card.CardType.TRADE_ROUTE: {
-		"name": "Trade Route",
-		"cost": 1, "resource": "research",
-		"body": "Connect 2 planets: each +1 Credits."
-	}
-}
+# Card definitions live in data/card_library.tres — edit cards/costs/text in the
+# inspector, not here. CardData entries are looked up by Card.CardType enum.
+const CARD_LIBRARY: CardLibrary = preload("res://data/card_library.tres")
 
 var STARTING_DECK := [
 	Card.CardType.DISCOVER, Card.CardType.DISCOVER, Card.CardType.DISCOVER, Card.CardType.DISCOVER,
@@ -83,17 +51,8 @@ var STARTING_DECK := [
 	Card.CardType.TRADE_ROUTE, Card.CardType.TRADE_ROUTE, Card.CardType.TRADE_ROUTE,
 ]
 
-const PLANET_DEFS := [
-	{ "name": "Arid Prime",  "type": "Rocky" },
-	{ "name": "Dustfall",    "type": "Rocky" },
-	{ "name": "Ironreach",   "type": "Rocky" },
-	{ "name": "Aquara",      "type": "Oceanic" },
-	{ "name": "Tide's End",  "type": "Oceanic" },
-	{ "name": "Glacius",     "type": "Ice" },
-	{ "name": "Frostmere",   "type": "Ice" },
-	{ "name": "Velmara",     "type": "Gas Giant" },
-	{ "name": "Stormveil",   "type": "Gas Giant" },
-]
+# Planet pool lives in data/planet_library.tres — add/edit planet defs there.
+const PLANET_LIBRARY: PlanetLibrary = preload("res://data/planet_library.tres")
 
 const HOMEWORLD_POSITION := Vector2(540, 220)
 
@@ -162,15 +121,15 @@ func _init_game_state() -> void:
 	GameState.reset_per_turn_flags()
 
 	# Player deck: shuffled card-type list. Each entry is just the enum value;
-	# CARD_DEFS supplies the rest at instantiation time.
+	# CARD_LIBRARY supplies the rest at instantiation time.
 	GameState.player_deck = STARTING_DECK.duplicate()
 	GameState.player_deck.shuffle()
 
 	# Planet deck: shuffled list of PlanetData. The homeworld is taken out and
 	# placed immediately; the remaining 8 stay face-down.
 	var pool: Array = []
-	for def in PLANET_DEFS:
-		pool.append(_make_planet_data(def["name"], def["type"]))
+	for p in PLANET_LIBRARY.planets:
+		pool.append(_make_planet_data(p.planet_name, p.planet_type))
 	pool.shuffle()
 	# Homeworld: pull a random rocky planet to feel grounded; fall back to any.
 	var homeworld = null
@@ -356,9 +315,9 @@ func _draw_one_card() -> void:
 		return
 	var card_type: int = GameState.player_deck.pop_back()
 	deck.cards_remaining = GameState.player_deck.size()
-	var def: Dictionary = CARD_DEFS[card_type]
+	var def: CardData = CARD_LIBRARY.get_by_type(card_type)
 	var card: Card = CARD_SCENE.instantiate()
-	card.configure(def["name"], card_type, int(def["cost"]), def["resource"], def["body"])
+	card.configure(def.card_name, card_type, def.cost, def.resource, def.body)
 	hand.add_card(card, deck.global_position)
 	card.set_affordable(GameState.can_afford(card.cost_dict()))
 
@@ -412,7 +371,8 @@ func _on_card_played(card: Card, target_planet) -> void:
 	match card.card_type:
 		Card.CardType.DISCOVER:
 			_apply_discover()
-			_send_card_to_exile(card)
+			#_send_card_to_exile(card)
+			_send_card_to_discard(card)
 		Card.CardType.BUILD_COLONY:
 			if _apply_build("Colony", target_planet):
 				_send_card_to_building_slot(card, target_planet)
@@ -616,13 +576,13 @@ func _open_pile_viewer(title: String, card_types: Array) -> void:
 	# isn't leaked through this UI.
 	var entries: Array = []
 	for ct in card_types:
-		var def: Dictionary = CARD_DEFS[ct]
+		var def: CardData = CARD_LIBRARY.get_by_type(ct)
 		entries.append({
-			"name": def["name"],
+			"name": def.card_name,
 			"type": ct,
-			"cost": def["cost"],
-			"resource": def["resource"],
-			"body": def["body"],
+			"cost": def.cost,
+			"resource": def.resource,
+			"body": def.body,
 		})
 	hand.input_paused = true
 	pile_viewer.show_pile(title, entries)

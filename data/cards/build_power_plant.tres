@@ -1,0 +1,11 @@
+[gd_resource type="Resource" script_class="CardData" load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/card_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+card_type = 4
+card_name = "Build Power Plant"
+cost = 3
+resource = "credits"
+body = "+2 Energy/turn on target planet."
