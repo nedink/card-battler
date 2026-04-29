@@ -6,7 +6,6 @@
 [ext_resource type="PackedScene" uid="uid://ckvv8rygrqism" path="res://scenes/discard_pile.tscn" id="4_discard_scene"]
 [ext_resource type="PackedScene" uid="uid://b0nhxt2ypx441" path="res://scenes/play_space.tscn" id="5_play_space"]
 [ext_resource type="PackedScene" uid="uid://b8hud001" path="res://scenes/hud.tscn" id="6_hud"]
-[ext_resource type="PackedScene" uid="uid://boxlmuoy5w441" path="res://scenes/event_card.tscn" id="7_event"]
 [ext_resource type="PackedScene" uid="uid://exilepile001" path="res://scenes/exile_pile.tscn" id="8_exile"]
 [ext_resource type="PackedScene" uid="uid://dwdr4cm5o6eqq" path="res://scenes/pile_viewer.tscn" id="9_pv"]
 
@@ -52,9 +51,6 @@ theme_override_font_sizes/font_size = 14
 theme_override_styles/normal = SubResource("SB_endbtn")
 text = "End Turn (SPACE)"
 
-[node name="EventCard" parent="." unique_id=1641281883 instance=ExtResource("7_event")]
-position = Vector2(640, 0)
-
 [node name="PlaySpace" parent="." unique_id=295236987 instance=ExtResource("5_play_space")]
 
 [node name="PlanetDeck" parent="." unique_id=940339789 instance=ExtResource("3_deck_scene")]
@@ -83,24 +79,7 @@ offset_right = 1060.0
 offset_bottom = 70.0
 theme_override_colors/font_color = Color(0.85, 0.85, 0.95, 1)
 theme_override_font_sizes/font_size = 13
-text = "Drag a Build card onto a planet. Drag Discover/Trade Route up. Click any pile to view. SPACE: end turn. ESC: cancel/close."
-
-[node name="SelectionOverlay" type="ColorRect" parent="." unique_id=704885667]
-visible = false
-offset_right = 1280.0
-offset_bottom = 720.0
-mouse_filter = 1
-color = Color(0, 0, 0, 0.35)
-
-[node name="SelectionLabel" type="Label" parent="SelectionOverlay" unique_id=1171086999]
-layout_mode = 0
-offset_top = 80.0
-offset_right = 1280.0
-offset_bottom = 110.0
-theme_override_colors/font_color = Color(1, 1, 1, 1)
-theme_override_font_sizes/font_size = 22
-text = "Select 2 planets to connect (Esc to cancel)"
-horizontal_alignment = 1
+text = "Drag Colony onto a planet. Drag Discover up to play. Click any pile to view. SPACE: end turn. ESC: close."
 
 [node name="PileViewer" parent="." unique_id=792158431 instance=ExtResource("9_pv")]
 layout_mode = 3

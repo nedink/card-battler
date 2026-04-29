@@ -179,22 +179,6 @@ func attach_building_card(card: Card) -> void:
 	card.z_index = index
 	_update_click_area_shape()
 
-func remove_building_visual_at(index: int) -> void:
-	# Free the visual at `index` and re-tween any cards beneath it upward to
-	# fill the gap. Caller is responsible for keeping data.buildings in sync.
-	if index < 0 or index >= _building_visuals.size():
-		return
-	var v = _building_visuals[index]
-	_building_visuals.remove_at(index)
-	if is_instance_valid(v):
-		v.queue_free()
-	for i in range(_building_visuals.size()):
-		var c: Card = _building_visuals[i]
-		if is_instance_valid(c):
-			c.settle_into_building_slot(_building_slot_local(i), BUILDING_CARD_SCALE)
-			c.z_index = i
-	_update_click_area_shape()
-
 func _building_slot_local(index: int) -> Vector2:
 	# Local position (in _buildings_root coords) where the card centred at
 	# slot `index` should sit. Buildings stack BELOW the planet: each card's
@@ -361,3 +345,23 @@ func contains_point(world_point: Vector2) -> bool:
 	# card dropped anywhere over the column targets this planet.
 	var local := to_local(world_point)
 	return get_local_bounds().has_point(local)
+
+func get_stack_top_card_types() -> Array:
+	# Tags the next stacker is matched against. If buildings have been played
+	# onto the planet, the most-recently-played building is the top — its
+	# card_types are what the next can_stack check sees. Otherwise it's the
+	# planet's own card_types.
+	if data == null:
+		return []
+	if data.buildings.size() > 0:
+		return data.buildings[data.buildings.size() - 1].card_types
+	return data.card_types
+
+func can_accept_stack(can_stack: Array) -> bool:
+	# True iff every tag in `can_stack` is present in this stack's top tags.
+	# An empty can_stack matches anything.
+	var top: Array = get_stack_top_card_types()
+	for tag in can_stack:
+		if not (tag in top):
+			return false
+	return true

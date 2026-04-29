@@ -4,8 +4,8 @@
 
 [resource]
 script = ExtResource("1")
-card_type = 1
 card_name = "Colony"
-body = "Build on {{Earthlike}}.
-
-After {{5}} turns, adds {{1}} Populace card to the discard pile."
+body = "Build on a planet."
+card_types = Array[String](["colony", "building"])
+can_stack = Array[String](["planet"])
+releases_on_threshold = false

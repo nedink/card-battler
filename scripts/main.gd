@@ -1,12 +1,18 @@
 extends Node2D
 
-# Game flow controller for the Planetary Civilization Tycoon. Owns:
-#   - turn-phase state machine (EVENT → DRAW → PLAY → END_TURN)
-#   - card play dispatch (Discover, Build_*, Trade Route)
-#   - trade-route selection mode (modal click-two-planets overlay)
+# Game flow controller. Owns:
+#   - turn-phase state machine (DRAW → PLAY → END_TURN)
+#   - card play dispatch via the can_stack tag system
 #
 # All persistent data lives in `GameState` (autoload). This script is just
 # orchestration and animation timing.
+#
+# NOTE — events: A per-turn random EVENT phase used to live here (Meteor
+# Strike, etc.). It was stripped during the v0 simplification down to the
+# Discover/Colony core. When the systems mature we want events back: a phase
+# slot before DRAW, a small library of effects keyed by tags on planets and
+# buildings, and the EventCard banner (still in res://scenes/) reused as the
+# announcement visual.
 
 const CARD_SCENE := preload("res://scenes/card.tscn")
 const CARD_BACK_SCENE := preload("res://scenes/card_back.tscn")
@@ -26,19 +32,19 @@ const RESHUFFLE_Z := -1
 const SHOWCASE_SLOT_SPACING := 110.0
 const SHOWCASE_Z_BASE := 1000
 
-# Per-turn random event roll. 0 disables events; 1.0 forces one every turn.
-const EVENT_CHANCE := 0.5
-
-# Card definitions live in data/card_library.tres — edit cards/text in the
-# inspector, not here. CardData entries are looked up by Card.CardType enum.
+# Card definitions live in data/card_library.tres. The starting deck just
+# references the .tres files directly — keeps it explicit which cards seed
+# the run without needing any lookup.
 const CARD_LIBRARY: CardLibrary = preload("res://data/card_library.tres")
+const CARD_DISCOVER: CardData = preload("res://data/cards/discover.tres")
+const CARD_BUILD_COLONY: CardData = preload("res://data/cards/build_colony.tres")
 
-var STARTING_DECK := [
-	Card.CardType.DISCOVER,
-	Card.CardType.BUILD_COLONY,
-	Card.CardType.BUILD_FACTORY,
-	Card.CardType.BUILD_LAB,
-	Card.CardType.BUILD_POWER_PLANT,
+var STARTING_DECK: Array[CardData] = [
+	CARD_DISCOVER,
+	CARD_DISCOVER,
+	CARD_DISCOVER,
+	CARD_BUILD_COLONY,
+	CARD_BUILD_COLONY,
 ]
 
 # Planet pool lives in data/planet_library.tres — add/edit planet defs there.
@@ -46,7 +52,7 @@ const PLANET_LIBRARY: PlanetLibrary = preload("res://data/planet_library.tres")
 
 const HOMEWORLD_POSITION := Vector2(540, 220)
 
-enum Phase { EVENT, DRAW, PLAY, END_TURN }
+enum Phase { DRAW, PLAY, END_TURN }
 
 @onready var deck: Deck = $PlayerDeck
 @onready var hand: Hand = $Hand
@@ -55,10 +61,7 @@ enum Phase { EVENT, DRAW, PLAY, END_TURN }
 @onready var planet_deck: Deck = $PlanetDeck
 @onready var play_space: PlaySpace = $PlaySpace
 @onready var hud: Hud = $Hud
-@onready var event_banner: EventCard = $EventCard
 @onready var end_turn_button: Button = $EndTurnButton
-@onready var selection_overlay: ColorRect = $SelectionOverlay
-@onready var selection_label: Label = $SelectionOverlay/SelectionLabel
 # Cast required because the instanced scene's static root type is `Control`
 # (the script class_name doesn't propagate through `$NodePath` lookup).
 @onready var pile_viewer: PileViewer = $PileViewer as PileViewer
@@ -68,18 +71,11 @@ var _play_counter: int = 0
 var _turn_transitioning: bool = false
 var _next_planet_id: int = 0
 
-# Trade route mode state. Active while the player is selecting two planets.
-var _trade_route_mode: bool = false
-var _trade_route_planets: Array = []
-# Cached card consumed by trade route mode — refunded if user cancels.
-var _trade_route_pending_card: Card = null
-
 func _ready() -> void:
 	Engine.time_scale = TIME_SCALE
 	hand.card_played.connect(_on_card_played)
 	hand.play_space = play_space
 	play_space.hand = hand
-	play_space.planet_clicked.connect(_on_planet_clicked)
 	play_space.set_planet_deck_position(planet_deck.global_position)
 	end_turn_button.pressed.connect(_on_end_turn)
 	# Pile-viewer wiring: clicking any pile pops a viewer with its contents.
@@ -87,28 +83,24 @@ func _ready() -> void:
 	discard.pile_clicked.connect(_open_discard_pile_viewer)
 	exile_pile.pile_clicked.connect(_open_exile_pile_viewer)
 	pile_viewer.dismissed.connect(_on_pile_viewer_dismissed)
-	selection_overlay.visible = false
 	_init_game_state()
 	_start_first_turn()
 
 func _init_game_state() -> void:
 	GameState.turn_number = 1
 	GameState.planets.clear()
-	GameState.trade_routes.clear()
 	GameState.player_discard.clear()
 	GameState.player_exile.clear()
 	GameState.total_buildings_placed = 0
 
-	# Player deck: shuffled card-type list. Each entry is just the enum value;
-	# CARD_LIBRARY supplies the rest at instantiation time.
 	GameState.player_deck = STARTING_DECK.duplicate()
 	GameState.player_deck.shuffle()
 
 	# Planet deck: shuffled list of PlanetData. The homeworld is taken out and
-	# placed immediately; the remaining 8 stay face-down.
+	# placed immediately; the remaining stay face-down.
 	var pool: Array = []
 	for p in PLANET_LIBRARY.planets:
-		pool.append(_make_planet_data(p.planet_name, p.planet_type))
+		pool.append(_make_planet_data(p))
 	pool.shuffle()
 	# Homeworld: pull a random rocky planet to feel grounded; fall back to any.
 	var homeworld = null
@@ -129,13 +121,16 @@ func _init_game_state() -> void:
 	discard.cards_remaining = 0
 	exile_pile.cards_remaining = 0
 
-func _make_planet_data(p_name: String, p_type: String):
-	var pd = GameState.PlanetData.new(_next_planet_id, p_name, p_type, Vector2.ZERO)
+func _make_planet_data(p) -> GameState.PlanetData:
+	# Param is untyped because Godot's static checker sometimes resolves
+	# typed-array entries loaded from .tres to the script resource type
+	# rather than the class_name (PlanetDef). Duck-typed field access works
+	# regardless once the resource is instantiated.
+	var pd := GameState.PlanetData.new(_next_planet_id, p.planet_name, p.planet_type, Vector2.ZERO, p.card_types)
 	_next_planet_id += 1
 	return pd
 
 func _start_first_turn() -> void:
-	# First turn skips EVENT to give the player one clean turn.
 	_run_draw_phase()
 	_set_phase(Phase.PLAY)
 
@@ -146,7 +141,7 @@ func _set_phase(p: int) -> void:
 	GameState.turn_phase_changed.emit(p)
 
 func _on_end_turn() -> void:
-	if _turn_transitioning or _trade_route_mode or hand.is_dragging():
+	if _turn_transitioning or hand.is_dragging():
 		return
 	_turn_transitioning = true
 	_run_end_turn_phase()
@@ -154,48 +149,12 @@ func _on_end_turn() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey and event.pressed:
 		if event.keycode == KEY_ESCAPE:
-			# Esc cascades from most-modal to least: viewer first, trade-route
-			# selection next, then quit.
 			if pile_viewer.is_open():
 				pile_viewer.hide_viewer()
-			elif _trade_route_mode:
-				_cancel_trade_route_mode()
 			else:
 				get_tree().quit()
 		elif event.keycode == KEY_SPACE:
 			_on_end_turn()
-
-# ---------------------------------------------------------------------------
-# EVENT phase — only Meteor Strike for now; resource-driven events are gone.
-
-func _run_event_phase() -> void:
-	_set_phase(Phase.EVENT)
-	if randf() >= EVENT_CHANCE:
-		return
-	_trigger_meteor_strike()
-
-func _trigger_meteor_strike() -> void:
-	# Destroy one random building from a random planet that has buildings.
-	var candidates := []
-	for p in GameState.planets:
-		if p.buildings.size() > 0:
-			candidates.append(p)
-	if candidates.is_empty():
-		event_banner.show_event("Meteor Strike", "A meteor struck — but found no infrastructure to harm.")
-		return
-	var planet = candidates.pick_random()
-	var idx: int = randi() % int(planet.buildings.size())
-	var destroyed = planet.buildings[idx]
-	planet.buildings.remove_at(idx)
-	# Also free the visual card sitting in the destroyed slot, then re-tween
-	# remaining building visuals up to fill the gap.
-	for pc in play_space.get_planets():
-		if pc.data == planet:
-			pc.remove_building_visual_at(idx)
-			pc.refresh_from_data()
-			break
-	event_banner.show_event("Meteor Strike",
-		"%s destroyed on %s." % [destroyed.building_type, planet.planet_name])
 
 # ---------------------------------------------------------------------------
 # DRAW phase
@@ -221,15 +180,14 @@ func _draw_one_card() -> void:
 		_animate_reshuffle(recycled)
 	if GameState.player_deck.is_empty():
 		return
-	var card_type: int = GameState.player_deck.pop_back()
+	var def: CardData = GameState.player_deck.pop_back()
 	deck.cards_remaining = GameState.player_deck.size()
-	var def: CardData = CARD_LIBRARY.get_by_type(card_type)
 	var card: Card = CARD_SCENE.instantiate()
-	card.configure(def.card_name, card_type, def.body)
+	card.configure(def)
 	hand.add_card(card, deck.global_position)
 
 # ---------------------------------------------------------------------------
-# END_TURN phase — discard hand, advance turn counter, run next EVENT/DRAW
+# END_TURN phase — discard hand, advance turn counter, draw next hand
 
 func _run_end_turn_phase() -> void:
 	_set_phase(Phase.END_TURN)
@@ -238,7 +196,7 @@ func _run_end_turn_phase() -> void:
 	# Logically place cards into discard immediately so the deck/discard
 	# counters stay correct even mid-flight.
 	for c in hand_cards:
-		GameState.player_discard.append(c.card_type)
+		GameState.player_discard.append(c.data)
 	discard.cards_remaining += hand_cards.size()
 	hand.cards.clear()
 	hand.layout()
@@ -249,7 +207,6 @@ func _run_end_turn_phase() -> void:
 
 	GameState.turn_number += 1
 	hud.set_turn(GameState.turn_number)
-	_run_event_phase()
 	_run_draw_phase()
 
 func _discard_one(card: Card) -> void:
@@ -260,49 +217,27 @@ func _discard_one(card: Card) -> void:
 # Card play dispatch
 
 func _on_card_played(card: Card, target_planet) -> void:
-	# Apply the card's effect, then send it to the right pile. Discover cards
-	# are exiled (removed from the deck for the rest of the run); everything
-	# else recycles through the discard pile back into the deck.
-	match card.card_type:
-		Card.CardType.DISCOVER:
-			_apply_discover()
-			#_send_card_to_exile(card)
-			_send_card_to_discard(card)
-		Card.CardType.BUILD_COLONY:
-			if _apply_build("Colony", target_planet):
-				_send_card_to_building_slot(card, target_planet)
-			else:
-				_send_card_to_discard(card)
-		Card.CardType.BUILD_FACTORY:
-			if _apply_build("Factory", target_planet):
-				_send_card_to_building_slot(card, target_planet)
-			else:
-				_send_card_to_discard(card)
-		Card.CardType.BUILD_LAB:
-			if _apply_build("Lab", target_planet):
-				_send_card_to_building_slot(card, target_planet)
-			else:
-				_send_card_to_discard(card)
-		Card.CardType.BUILD_POWER_PLANT:
-			if _apply_build("Power Plant", target_planet):
-				_send_card_to_building_slot(card, target_planet)
-			else:
-				_send_card_to_discard(card)
-		Card.CardType.TRADE_ROUTE:
-			# Trade route enters selection mode. The card is held aside (its
-			# pile destination is decided after the player picks two planets,
-			# or it's returned to the hand on cancel).
-			_trade_route_pending_card = card
-			card.visible = false
-			_begin_trade_route_mode()
+	# Two play paths:
+	#   1. Stack — `target_planet` is a PlanetCard whose stack-top satisfied
+	#      this card's can_stack rule. The card becomes a building visual on
+	#      that planet's stack.
+	#   2. Threshold — `target_planet` is null. The card was released above
+	#      the hand threshold; dispatch by tag.
+	if target_planet != null:
+		_apply_stack(card, target_planet)
+		_send_card_to_building_slot(card, target_planet)
+		return
+	if "discover" in card.card_types:
+		_apply_discover()
+	_send_card_to_discard(card)
 
 func _send_card_to_discard(card: Card) -> void:
-	GameState.player_discard.append(card.card_type)
+	GameState.player_discard.append(card.data)
 	discard.cards_remaining = GameState.player_discard.size()
 	_animate_play_to_pile(card, discard.global_position)
 
 func _send_card_to_exile(card: Card) -> void:
-	GameState.player_exile.append(card.card_type)
+	GameState.player_exile.append(card.data)
 	exile_pile.cards_remaining = GameState.player_exile.size()
 	_animate_play_to_pile(card, exile_pile.global_position)
 
@@ -310,7 +245,7 @@ func _send_card_to_building_slot(card: Card, target_planet) -> void:
 	# The played card itself becomes the planet's building visual — handed
 	# off to the planet, which reparents it and tweens it into a stacked
 	# slot. It does NOT go into the discard pile (it's consumed by the
-	# building) — meteor strikes destroy the visual outright.
+	# building).
 	target_planet.attach_building_card(card)
 
 func _animate_play_to_pile(card: Card, target_world_pos: Vector2) -> void:
@@ -351,88 +286,17 @@ func _apply_discover() -> void:
 	GameState.planets.append(pd)
 	play_space.emit_next_planet(pd)
 
-func _apply_build(building_type: String, target_planet) -> bool:
-	# Returns true if the building was actually added. Caller uses this to
-	# decide whether the played card becomes a building visual or, in the
-	# fallback case (target invalid / planet full), falls back to the discard
-	# pile.
+func _apply_stack(card: Card, target_planet) -> void:
+	# Mutates GameState: appends the played card as a BuildingData on the
+	# target planet. The visual (the card itself) is reparented later by
+	# _send_card_to_building_slot.
 	if target_planet == null or target_planet.data == null:
-		return false
+		return
 	var planet = target_planet.data
-	if planet.buildings.size() >= GameState.MAX_BUILDINGS_PER_PLANET:
-		return false
-	var b = GameState.BuildingData.new(building_type)
+	var b = GameState.BuildingData.new(card.data)
 	planet.buildings.append(b)
 	GameState.total_buildings_placed += 1
 	target_planet.refresh_from_data()
-	return true
-
-# ---------------------------------------------------------------------------
-# Trade route mode
-
-func _begin_trade_route_mode() -> void:
-	_trade_route_mode = true
-	_trade_route_planets.clear()
-	selection_overlay.visible = true
-	selection_label.text = "Select 2 planets to connect (Esc to cancel)"
-	# Block further plays while the modal is active.
-	hand.can_play_card = func(_c): return false
-
-func _on_planet_clicked(planet) -> void:
-	if not _trade_route_mode:
-		return
-	if planet in _trade_route_planets:
-		return
-	# Disallow connecting two planets already linked.
-	for route in GameState.trade_routes:
-		if (route.planet_a_id == planet.data.id and _trade_route_planets.size() == 1 \
-				and route.planet_b_id == _trade_route_planets[0].data.id) \
-			or (route.planet_b_id == planet.data.id and _trade_route_planets.size() == 1 \
-				and route.planet_a_id == _trade_route_planets[0].data.id):
-			return
-	planet.set_selected(true)
-	_trade_route_planets.append(planet)
-	if _trade_route_planets.size() == 2:
-		_finalize_trade_route()
-
-func _finalize_trade_route() -> void:
-	var pa = _trade_route_planets[0]
-	var pb = _trade_route_planets[1]
-	var data = GameState.TradeRouteData.new(pa.data.id, pb.data.id)
-	GameState.trade_routes.append(data)
-	play_space.add_trade_route_visual(pa, pb, data)
-	pa.set_selected(false)
-	pb.set_selected(false)
-	# Send the held card to the discard pile (Trade Route is reusable, not exiled).
-	var card := _trade_route_pending_card
-	_trade_route_pending_card = null
-	if card != null:
-		card.visible = true
-		_send_card_to_discard(card)
-	_exit_trade_route_mode()
-
-func _cancel_trade_route_mode() -> void:
-	# Return the card to the hand. The card was never put in any pile yet —
-	# it's been held in _trade_route_pending_card while the modal is up — so
-	# there's nothing to remove from discard/exile here.
-	for p in _trade_route_planets:
-		p.set_selected(false)
-	_trade_route_planets.clear()
-	if _trade_route_pending_card != null:
-		var card := _trade_route_pending_card
-		_trade_route_pending_card = null
-		card.visible = true
-		hand.cards.append(card)
-		# Card was left in DRAGGING state when the play emitted. Return it to
-		# IDLE so _process eases it back to its rest pose in the fan.
-		card.end_drag_return()
-		hand.layout()
-	_exit_trade_route_mode()
-
-func _exit_trade_route_mode() -> void:
-	_trade_route_mode = false
-	selection_overlay.visible = false
-	hand.can_play_card = Callable()
 
 # ---------------------------------------------------------------------------
 # Pile viewers (draw/discard/exile)
@@ -446,20 +310,9 @@ func _open_discard_pile_viewer() -> void:
 func _open_exile_pile_viewer() -> void:
 	_open_pile_viewer("Exile Pile", GameState.player_exile)
 
-func _open_pile_viewer(title: String, card_types: Array) -> void:
-	# Build per-card def dicts the viewer can render with card.configure().
-	# The viewer sorts alphabetically by name internally so the deck order
-	# isn't leaked through this UI.
-	var entries: Array = []
-	for ct in card_types:
-		var def: CardData = CARD_LIBRARY.get_by_type(ct)
-		entries.append({
-			"name": def.card_name,
-			"type": ct,
-			"body": def.body,
-		})
+func _open_pile_viewer(title: String, cards: Array) -> void:
 	hand.input_paused = true
-	pile_viewer.show_pile(title, entries)
+	pile_viewer.show_pile(title, cards)
 
 func _on_pile_viewer_dismissed() -> void:
 	hand.input_paused = false

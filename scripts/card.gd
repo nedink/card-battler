@@ -7,14 +7,8 @@ const SIZE := Vector2(120, 168)
 const HOVER_LIFT := 32.0
 const SETTLE_SPEED := 14.0
 
-# Logical kind of card. Drives both UI badge color and how main.gd dispatches
-# the play action (BUILD_* targets a planet, DISCOVER and TRADE_ROUTE don't).
-# DO NOT reorder — values are stored as ints in player_deck and in the
-# data/cards/*.tres CardData resources.
-enum CardType { DISCOVER, BUILD_COLONY, BUILD_FACTORY, BUILD_LAB, BUILD_POWER_PLANT, TRADE_ROUTE }
-
 # Tinted gold border drawn on the planet currently under the cursor while a
-# planet-targeting card is being dragged.
+# stack-targeting card is being dragged.
 const TARGETED_BORDER := Color(1.0, 0.85, 0.2)
 
 # Play animation: settle into the showcase point, then arc over to the discard.
@@ -60,14 +54,21 @@ var card_name: String = "Strike":
 			_name_label.text = value
 			_name_label.add_theme_font_size_override("font_size", _font_size_for(value.length(), NAME_FONT_SIZES))
 
-# Logical card kind — see CardType enum. Trade Route and Discover use the
-# threshold-release flow; the BUILD_* variants drag-onto-planet instead.
-var card_type: int = CardType.DISCOVER
+# Source CardData resource — populated by configure(). Acts as the card's
+# identity for dispatch and pile-storage; everything else (name, tags, body)
+# is derived from it.
+var data: CardData = null
 
-# Whether release-to-play means "drop on a planet" vs. "release above hand
-# threshold". Hand consults this in _process to drive planet hover highlighting
-# and in _end_drag to dispatch the right code path.
-var targets_planet: bool = false
+# Tags identifying this card (mirrored from data.card_types for fast access).
+var card_types: Array[String] = []
+
+# Tags the top of a target stack must contain for this card to stack on it.
+var can_stack: Array[String] = []
+
+# When true, the card plays via release-above-threshold instead of by being
+# dragged onto a stack. Hand consults this in _process to gate planet
+# highlighting and in _end_drag to dispatch the right code path.
+var releases_on_threshold: bool = false
 
 # Body description text — second line on the card. Set per card kind.
 var body_text: String = "":
@@ -130,15 +131,14 @@ func set_play_ready(value: bool) -> void:
 	play_ready = value
 	_refresh_visual()
 
-func configure(p_name: String, p_type: int, p_body: String) -> void:
-	# Bulk setter so main.gd can spawn cards with one call from a definition dict.
-	card_name = p_name
-	card_type = p_type
-	body_text = p_body
-	targets_planet = (p_type == CardType.BUILD_COLONY \
-		or p_type == CardType.BUILD_FACTORY \
-		or p_type == CardType.BUILD_LAB \
-		or p_type == CardType.BUILD_POWER_PLANT)
+func configure(p_data: CardData) -> void:
+	# Bulk setter so main.gd can spawn cards with one call from a CardData ref.
+	data = p_data
+	card_name = p_data.card_name
+	body_text = p_data.body
+	card_types = p_data.card_types.duplicate()
+	can_stack = p_data.can_stack.duplicate()
+	releases_on_threshold = p_data.releases_on_threshold
 
 func _refresh_visual() -> void:
 	if _body_stylebox == null:

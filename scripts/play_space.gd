@@ -1,13 +1,7 @@
 class_name PlaySpace extends Node2D
 
-# Hosts settled planet cards and trade-route lines. Owns planet emission
-# (card-back arc from the planet deck → settle into a non-overlapping spot).
-#
-# Relays planet_clicked from each child PlanetCard so main.gd can switch on
-# game phase to decide whether the click means "select for trade route" or
-# "manual reposition".
-
-signal planet_clicked(planet)
+# Hosts settled planet cards. Owns planet emission (card-back arc from the
+# planet deck → settle into a non-overlapping spot).
 
 const CARD_BACK_SCENE := preload("res://scenes/card_back.tscn")
 const PLANET_CARD_SCENE := preload("res://scenes/planet_card.tscn")
@@ -43,7 +37,6 @@ const PAN_DRAG_THRESHOLD := 4.0
 enum PanState { IDLE, PENDING, ACTIVE }
 
 @onready var _planets_container: Node2D = $Planets
-@onready var _routes_container: Node2D = $Routes
 
 var _planet_deck_position: Vector2 = Vector2(1180, 40)
 
@@ -201,11 +194,7 @@ func _spawn_planet(planet_data, world_pos: Vector2) -> PlanetCard:
 	pc.global_position = world_pos
 	pc.bind_data(planet_data)
 	planet_data.position = world_pos
-	pc.planet_clicked.connect(_on_planet_clicked)
 	return pc
-
-func _on_planet_clicked(planet) -> void:
-	planet_clicked.emit(planet)
 
 func _find_non_overlapping_position() -> Vector2:
 	# A new planet has no buildings yet, so its candidate AABB is just the
@@ -253,22 +242,3 @@ static func _candidate_clear(candidate: Rect2, existing_bounds: Array, pad: floa
 			return false
 	return true
 
-# ---------------------------------------------------------------------------
-# Trade route visuals (Phase 7 wiring lives in main.gd)
-
-const TRADE_ROUTE_SCENE := preload("res://scenes/trade_route.tscn")
-
-func add_trade_route_visual(planet_a: PlanetCard, planet_b: PlanetCard, data) -> Node:
-	var route = TRADE_ROUTE_SCENE.instantiate()
-	_routes_container.add_child(route)
-	route.bind(planet_a, planet_b, data)
-	return route
-
-func clear_trade_routes() -> void:
-	for c in _routes_container.get_children():
-		c.queue_free()
-
-func remove_trade_routes_for_planet(planet: PlanetCard) -> void:
-	for c in _routes_container.get_children():
-		if c.has_method("involves") and c.involves(planet):
-			c.queue_free()

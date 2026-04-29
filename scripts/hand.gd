@@ -1,7 +1,7 @@
 @tool
 class_name Hand extends Node2D
 
-# target_planet is null for non-targeted cards (Discover, Trade Route).
+# target_planet is null for threshold-released cards.
 signal card_played(card: Card, target_planet)
 
 @export var max_card_spacing: float = 110.0:
@@ -38,12 +38,12 @@ var _hovered_card: Card = null
 var _dragging_card: Card = null
 # Optional Callable(card: Card) -> bool. When set, used to gate plays — a card
 # only counts as play-ready if this returns true. Lets Hand stay decoupled from
-# whatever play-gating the game wants (e.g. trade-route mode disables all plays).
+# whatever play-gating the game wants (e.g. a future modal that disables plays).
 var can_play_card: Callable = Callable()
 
 # Reference to the play space — set by main.gd after both nodes exist. While a
-# planet-targeting card is being dragged, the hand asks the play space for the
-# planet under the cursor and toggles its highlight.
+# stack-targeting card is being dragged, the hand asks the play space for the
+# stack under the cursor and toggles its highlight.
 var play_space: Node = null
 var _last_targeted_planet: Node = null
 
@@ -64,22 +64,32 @@ func _process(_delta: float) -> void:
 	if _dragging_card != null:
 		var mouse := get_global_mouse_position()
 		_dragging_card.update_drag_position(mouse)
-		if _dragging_card.targets_planet:
-			# Planet-targeting cards: highlight the planet under the cursor when
-			# the card is playable; release-to-play lights up only while a target
-			# is hovered.
-			var hit = null
-			if play_space != null and _is_card_playable(_dragging_card) and play_space.has_method("get_planet_under_cursor"):
-				hit = play_space.get_planet_under_cursor(mouse)
-			_set_targeted_planet(hit)
-			_dragging_card.set_play_ready(hit != null)
-		else:
+		if _dragging_card.releases_on_threshold:
 			_set_targeted_planet(null)
 			# Live feedback: green = release-to-play, neutral = release-returns-to-hand.
 			# The whole card must clear the threshold AND be playable.
 			_dragging_card.set_play_ready(_card_clears_threshold(_dragging_card) and _is_card_playable(_dragging_card))
+		else:
+			# Stack-targeting cards: highlight a stack whose top satisfies the
+			# card's can_stack tags. release-to-play lights up only while a
+			# valid target is hovered.
+			var hit = _find_stack_target(mouse, _dragging_card)
+			_set_targeted_planet(hit)
+			_dragging_card.set_play_ready(hit != null)
 	else:
 		_update_hover()
+
+func _find_stack_target(mouse: Vector2, card: Card):
+	if play_space == null or not _is_card_playable(card):
+		return null
+	if not play_space.has_method("get_planet_under_cursor"):
+		return null
+	var hit = play_space.get_planet_under_cursor(mouse)
+	if hit == null:
+		return null
+	if hit.has_method("can_accept_stack") and not hit.can_accept_stack(card.can_stack):
+		return null
+	return hit
 
 func _set_targeted_planet(planet) -> void:
 	if planet == _last_targeted_planet:
@@ -156,10 +166,20 @@ func _start_drag(card: Card) -> void:
 func _end_drag() -> void:
 	var card := _dragging_card
 	_dragging_card = null
-	if card.targets_planet:
-		# Drag-onto-planet: only plays if a planet is currently targeted AND the
-		# card is otherwise playable. Threshold doesn't apply — the player
-		# might drop directly on a planet without raising the card high.
+	if card.releases_on_threshold:
+		if _card_clears_threshold(card) and _is_card_playable(card):
+			# Released outside the hand zone with a playable card: remove and fly off.
+			cards.erase(card)
+			layout()
+			card_played.emit(card, null)
+		else:
+			# Released inside the hand zone OR not playable: it slots back in.
+			card.end_drag_return()
+			layout()
+	else:
+		# Stack-target: only plays if a valid stack is currently targeted AND
+		# the card is otherwise playable. Threshold doesn't apply — the player
+		# might drop directly on a stack without raising the card high.
 		var target = _last_targeted_planet
 		_set_targeted_planet(null)
 		if target != null and _is_card_playable(card):
@@ -169,15 +189,6 @@ func _end_drag() -> void:
 		else:
 			card.end_drag_return()
 			layout()
-	elif _card_clears_threshold(card) and _is_card_playable(card):
-		# Released outside the hand zone with a playable card: remove and fly off.
-		cards.erase(card)
-		layout()
-		card_played.emit(card, null)
-	else:
-		# Released inside the hand zone OR not playable: it slots back in.
-		card.end_drag_return()
-		layout()
 
 func _card_clears_threshold(card: Card) -> bool:
 	# True only when the card's bottom edge is strictly above the threshold line.

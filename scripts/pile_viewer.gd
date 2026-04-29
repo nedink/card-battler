@@ -41,9 +41,8 @@ func _ready() -> void:
 func is_open() -> bool:
 	return visible
 
-# `entries` is an Array of Dictionaries with keys {name, type, body}, where
-# "type" is the Card.CardType int. main.gd assembles them from CARD_LIBRARY
-# so this script doesn't have to know about CardData.
+# `entries` is an Array[CardData]. Cards are rendered alphabetically so the
+# pile's draw order isn't leaked through this UI.
 func show_pile(title: String, entries: Array) -> void:
 	_title.text = title
 	for c in _cards_root.get_children():
@@ -53,9 +52,8 @@ func show_pile(title: String, entries: Array) -> void:
 		_empty.text = "Pile is empty."
 	else:
 		_empty.visible = false
-		# Sort alphabetically by name so the deck order isn't leaked.
 		var sorted := entries.duplicate()
-		sorted.sort_custom(func(a, b): return String(a.get("name", "")) < String(b.get("name", "")))
+		sorted.sort_custom(func(a, b): return String(a.card_name) < String(b.card_name))
 		var panel_w: float = _panel.size.x
 		var panel_h: float = _panel.size.y
 		var rows: int = int(ceil(float(sorted.size()) / float(CARDS_PER_ROW)))
@@ -64,13 +62,10 @@ func show_pile(title: String, entries: Array) -> void:
 		var grid_avail_h: float = panel_h - PANEL_GRID_TOP - PANEL_GRID_BOTTOM_PAD
 		var y_off: float = PANEL_GRID_TOP + maxf((grid_avail_h - grid_h) * 0.5, 0.0)
 		for i in range(sorted.size()):
-			var def: Dictionary = sorted[i]
+			var def: CardData = sorted[i]
 			var card: Card = CARD_SCENE.instantiate()
 			_cards_root.add_child(card)
-			card.configure(
-				String(def.get("name", "?")),
-				int(def.get("type", 0)),
-				String(def.get("body", "")))
+			card.configure(def)
 			# Cards are display-only here; let clicks fall through to the panel's
 			# gui_input handler (and through it to the backdrop) so the user can
 			# dismiss the viewer by clicking anywhere — over a card, the panel

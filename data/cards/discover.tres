@@ -6,3 +6,6 @@
 script = ExtResource("1")
 card_name = "Discover"
 body = "Reveal a new planet."
+card_types = Array[String](["discover"])
+can_stack = Array[String]([])
+releases_on_threshold = true
