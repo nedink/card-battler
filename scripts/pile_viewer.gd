@@ -35,6 +35,7 @@ const PANEL_GRID_BOTTOM_PAD := 24.0
 
 func _ready() -> void:
 	_backdrop.gui_input.connect(_on_backdrop_input)
+	_panel.gui_input.connect(_on_backdrop_input)
 	visible = false
 
 func is_open() -> bool:
@@ -70,6 +71,11 @@ func show_pile(title: String, entries: Array) -> void:
 				String(def.get("name", "?")),
 				int(def.get("type", 0)),
 				String(def.get("body", "")))
+			# Cards are display-only here; let clicks fall through to the panel's
+			# gui_input handler (and through it to the backdrop) so the user can
+			# dismiss the viewer by clicking anywhere — over a card, the panel
+			# background, or the dim backdrop.
+			_disable_input(card)
 			card.scale = Vector2(CARD_SCALE, CARD_SCALE)
 			var col: int = i % CARDS_PER_ROW
 			var row: int = i / CARDS_PER_ROW
@@ -94,3 +100,9 @@ func hide_viewer() -> void:
 func _on_backdrop_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		hide_viewer()
+
+func _disable_input(node: Node) -> void:
+	if node is Control:
+		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for c in node.get_children():
+		_disable_input(c)

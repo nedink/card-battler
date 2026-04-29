@@ -23,9 +23,11 @@ const SETTLE_DURATION := 0.3
 
 const NORMAL_BG := Color(0.18, 0.22, 0.32)
 const NORMAL_BORDER := Color(0.4, 0.45, 0.55)
+const HOVERED_BORDER := Color(0.85, 0.9, 1.0)
 const TARGETED_BORDER := Color(1.0, 0.85, 0.2)
 const SELECTED_BORDER := Color(0.45, 1.0, 0.55)
-const BORDER_WIDTH_NORMAL := 3
+const BORDER_WIDTH_NORMAL := 0
+const BORDER_WIDTH_HOVER := 4
 const BORDER_WIDTH_HIGHLIGHT := 5
 
 # Stacking config for attached building cards. The played card is reparented
@@ -40,7 +42,7 @@ const BUILDING_STEP := 28.0
 @onready var _body: Panel = $Body
 @onready var _name_label: Label = $Body/NameLabel
 @onready var _type_label: Label = $Body/TypeLabel
-@onready var _sphere: ColorRect = $Sphere
+@onready var _sphere: ColorRect = $Body/Sphere
 @onready var _buildings_root: Node2D = $Buildings
 @onready var _click_area: Area2D = $ClickArea
 @onready var _click_shape: CollisionShape2D = $ClickArea/CollisionShape2D
@@ -57,6 +59,7 @@ const TYPE_COLORS := {
 const FALLBACK_TYPE_COLOR := Color(0.5, 0.5, 0.5)
 
 var data = null                       # GameState.PlanetData (typed Variant — autoload class)
+var hovered: bool = false
 var targeted: bool = false
 var selected: bool = false
 var draggable_in_bounds: bool = true
@@ -116,15 +119,31 @@ func refresh_from_data() -> void:
 		_name_label.text = data.planet_name
 	if _type_label != null:
 		_type_label.text = data.planet_type
-	_apply_sphere_color()
+	var type_color := _combined_type_color(data.planet_type)
+	_apply_sphere_color(type_color)
+	_apply_body_color(type_color)
 
-func _apply_sphere_color() -> void:
-	if _sphere == null or data == null:
+func _apply_sphere_color(type_color: Color) -> void:
+	if _sphere == null:
 		return
 	var mat: ShaderMaterial = _sphere.material as ShaderMaterial
 	if mat == null:
 		return
-	mat.set_shader_parameter("base_color", _combined_type_color(data.planet_type))
+	mat.set_shader_parameter("base_color", type_color)
+
+func _apply_body_color(type_color: Color) -> void:
+	# Tint the card body toward a dark shade of the planet's type color so the
+	# whole card reads as that world's color. Blend toward NORMAL_BG to keep
+	# the panel dark enough that the white name label stays legible.
+	if _body_stylebox == null:
+		return
+	var t := 0.55
+	_body_stylebox.bg_color = Color(
+		lerp(type_color.r, NORMAL_BG.r, t),
+		lerp(type_color.g, NORMAL_BG.g, t),
+		lerp(type_color.b, NORMAL_BG.b, t),
+		1.0,
+	)
 
 func _combined_type_color(type_string: String) -> Color:
 	# Splits the planet_type field on "/" or "," so a future multi-type planet
@@ -185,6 +204,12 @@ func _building_slot_local(index: int) -> Vector2:
 	var bottom_y := BODY_HALF.y + float(index + 1) * BUILDING_STEP
 	return Vector2(0.0, bottom_y - Card.SIZE.y * 0.5)
 
+func set_hovered(value: bool) -> void:
+	if hovered == value:
+		return
+	hovered = value
+	_refresh_visual()
+
 func set_targeted(value: bool) -> void:
 	if targeted == value:
 		return
@@ -206,6 +231,9 @@ func _refresh_visual() -> void:
 	elif targeted:
 		_body_stylebox.border_color = TARGETED_BORDER
 		_set_border_width(BORDER_WIDTH_HIGHLIGHT)
+	elif hovered:
+		_body_stylebox.border_color = HOVERED_BORDER
+		_set_border_width(BORDER_WIDTH_HOVER)
 	else:
 		_body_stylebox.border_color = NORMAL_BORDER
 		_set_border_width(BORDER_WIDTH_NORMAL)

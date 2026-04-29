@@ -29,8 +29,12 @@ offset_bottom = 84.0
 mouse_filter = 2
 theme_override_styles/panel = SubResource("StyleBoxFlat_body")
 
+[node name="Sprite2D" type="Sprite2D" parent="Body" unique_id=2052605753]
+position = Vector2(60, 58)
+scale = Vector2(0.765625, 0.51562494)
+texture = ExtResource("2_6u4wf")
+
 [node name="NameLabel" type="Label" parent="Body" unique_id=236591173]
-z_index = 10
 layout_mode = 0
 offset_left = 10.0
 offset_top = 1.0
@@ -41,7 +45,6 @@ theme_override_font_sizes/font_size = 18
 text = "Strike"
 
 [node name="NameLabel2" type="Label" parent="Body" unique_id=294952074]
-z_index = 10
 layout_mode = 0
 offset_left = 10.0
 offset_top = 94.0
@@ -53,8 +56,3 @@ theme_override_font_sizes/font_size = 18
 text = "Deal 6 damage"
 label_settings = SubResource("LabelSettings_6u4wf")
 autowrap_mode = 3
-
-[node name="Sprite2D" type="Sprite2D" parent="." unique_id=2052605753]
-position = Vector2(0, -26.000002)
-scale = Vector2(0.765625, 0.51562494)
-texture = ExtResource("2_6u4wf")

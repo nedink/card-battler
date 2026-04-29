@@ -6,4 +6,6 @@
 script = ExtResource("1")
 card_type = 1
 card_name = "Colony"
-body = "Place a Colony on target planet."
+body = "Build on {{Earthlike}}.
+
+After {{5}} turns, adds {{1}} Populace card to the discard pile."

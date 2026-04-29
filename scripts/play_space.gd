@@ -51,6 +51,11 @@ var _pan_state: int = PanState.IDLE
 var _pan_start_screen: Vector2 = Vector2.ZERO
 var _pan_start_position: Vector2 = Vector2.ZERO
 
+# Currently hovered planet/stack (topmost under the cursor). Updated on mouse
+# motion. Cleared while the hand is dragging a card so its `targeted` highlight
+# is the sole signal during a card play.
+var _hovered_planet: PlanetCard = null
+
 # Set by main.gd. Read to defer to hand interactions (a hovered card, or a
 # modal that paused the hand) when deciding whether to start a pan.
 var hand: Node = null
@@ -78,14 +83,31 @@ func _unhandled_input(event: InputEvent) -> void:
 			_zoom_at(mb.position, ZOOM_STEP)
 		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			_zoom_at(mb.position, 1.0 / ZOOM_STEP)
-	elif event is InputEventMouseMotion and _pan_state != PanState.IDLE:
+	elif event is InputEventMouseMotion:
 		var mm: InputEventMouseMotion = event
-		var delta: Vector2 = mm.position - _pan_start_screen
-		if _pan_state == PanState.PENDING:
-			if delta.length() < PAN_DRAG_THRESHOLD:
-				return
-			_pan_state = PanState.ACTIVE
-		position = _pan_start_position + delta
+		if _pan_state != PanState.IDLE:
+			var delta: Vector2 = mm.position - _pan_start_screen
+			if _pan_state == PanState.PENDING:
+				if delta.length() < PAN_DRAG_THRESHOLD:
+					return
+				_pan_state = PanState.ACTIVE
+			position = _pan_start_position + delta
+		_update_hovered_planet(mm.position)
+
+func _update_hovered_planet(screen_pos: Vector2) -> void:
+	# Suppress the hover highlight while the hand is dragging a card — that
+	# flow uses the `targeted` (yellow) border so its planet under the cursor
+	# is unambiguous.
+	var hit = null
+	if hand == null or not hand.is_dragging():
+		hit = get_planet_under_cursor(screen_pos)
+	if hit == _hovered_planet:
+		return
+	if _hovered_planet != null and is_instance_valid(_hovered_planet):
+		_hovered_planet.set_hovered(false)
+	_hovered_planet = hit
+	if hit != null:
+		hit.set_hovered(true)
 
 func _can_start_pan(screen_pos: Vector2) -> bool:
 	# Press initiates a pan only if the click would otherwise hit the empty

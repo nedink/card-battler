@@ -13,15 +13,13 @@ shader_parameter/specular_strength = 0.45
 
 [sub_resource type="StyleBoxFlat" id="SB_body"]
 bg_color = Color(0.18, 0.22, 0.32, 1)
-border_width_left = 3
-border_width_top = 3
-border_width_right = 3
-border_width_bottom = 3
-border_color = Color(0.4, 0.45, 0.55, 1)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
+shadow_color = Color(0.07, 0.08, 0.12, 0.45)
+shadow_size = 8
+shadow_offset = Vector2(0, 3)
 
 [sub_resource type="RectangleShape2D" id="Shape_click"]
 size = Vector2(120, 168)
@@ -38,7 +36,6 @@ mouse_filter = 2
 theme_override_styles/panel = SubResource("SB_body")
 
 [node name="NameLabel" type="Label" parent="Body" unique_id=2132216204]
-z_index = 10
 layout_mode = 0
 offset_left = 6.0
 offset_top = 8.0
@@ -50,7 +47,6 @@ text = "Planet"
 horizontal_alignment = 1
 
 [node name="TypeLabel" type="Label" parent="Body" unique_id=326276342]
-z_index = 10
 layout_mode = 0
 offset_left = 6.0
 offset_top = 38.0
@@ -61,12 +57,11 @@ theme_override_font_sizes/font_size = 11
 text = "Rocky"
 horizontal_alignment = 1
 
-[node name="Sphere" type="ColorRect" parent="." unique_id=415270001]
-z_index = 2
-offset_left = -30.0
-offset_top = -114.0
-offset_right = 30.0
-offset_bottom = -54.0
+[node name="Sphere" type="ColorRect" parent="Body" unique_id=415270001]
+offset_left = 15.0
+offset_top = 64.0
+offset_right = 105.0
+offset_bottom = 154.0
 mouse_filter = 2
 material = SubResource("SM_sphere")
 
