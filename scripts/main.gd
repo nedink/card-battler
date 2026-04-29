@@ -92,6 +92,7 @@ func _ready() -> void:
 	hand.card_played.connect(_on_card_played)
 	hand.can_play_card = _can_play_card
 	hand.play_space = play_space
+	play_space.hand = hand
 	GameState.resources_changed.connect(_update_hand_affordability)
 	play_space.planet_clicked.connect(_on_planet_clicked)
 	play_space.set_planet_deck_position(planet_deck.global_position)

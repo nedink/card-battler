@@ -37,8 +37,8 @@ var cards: Array[Card] = []
 var _hovered_card: Card = null
 var _dragging_card: Card = null
 # Optional Callable(card: Card) -> bool. When set, used to gate plays — a card
-# only counts as play-ready if this returns true (e.g., enough credits). Letting
-# Hand stay decoupled from whatever resource model the game uses.
+# only counts as play-ready if this returns true. Lets Hand stay decoupled from
+# whatever play-gating the game wants (e.g. trade-route mode disables all plays).
 var can_play_card: Callable = Callable()
 
 # Reference to the play space — set by main.gd after both nodes exist. While a
@@ -76,7 +76,7 @@ func _process(_delta: float) -> void:
 		else:
 			_set_targeted_planet(null)
 			# Live feedback: green = release-to-play, neutral = release-returns-to-hand.
-			# The whole card must clear the threshold AND be playable (e.g. affordable).
+			# The whole card must clear the threshold AND be playable.
 			_dragging_card.set_play_ready(_card_clears_threshold(_dragging_card) and _is_card_playable(_dragging_card))
 	else:
 		_update_hover()
@@ -128,6 +128,9 @@ func add_card(card: Card, spawn_world: Vector2) -> void:
 
 func is_dragging() -> bool:
 	return _dragging_card != null
+
+func has_hovered_card() -> bool:
+	return _hovered_card != null
 
 func clear_hover() -> void:
 	# Force-unhover whatever's currently hovered. Used at end-of-turn before

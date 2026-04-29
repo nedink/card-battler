@@ -15,18 +15,9 @@ const PLANET_CARD_SCENE := preload("res://scenes/planet_card.tscn")
 # Bounds within which planets settle. Wider than the manual-reposition bounds
 # in PlanetCard because the play space spans most of the screen.
 const PLAY_BOUNDS := Rect2(20, 60, 1040, 470)
-# Two planets must keep at least this much center-to-center clearance for the
-# placement search to consider a candidate spot valid. Sized to keep the
-# 120-wide card bodies clear of one another with a small gap; vertical building
-# stacks may still overlap a neighbor's chips at max fill — players can drag
-# planets to rearrange.
-const COLLISION_RADIUS := 95.0
 const PLACEMENT_TRIES := 12
 # Card centers settle within these ranges. X leaves 60px (card half-width) of
-# margin from each edge. Y is positioned in the lower half of the play area
-# so a fully-built planet's solitaire stack — which now grows UPWARD from
-# the planet card — has room to extend toward the top of the screen without
-# clipping. The lower bound keeps the planet body clear of the hand at y≈580.
+# margin from each edge.
 const SETTLE_X_RANGE := Vector2(100, 1000)
 const SETTLE_Y_RANGE := Vector2(380, 470)
 
@@ -38,29 +29,80 @@ const EMIT_DURATION := 0.55
 const ZOOM_MIN := 0.5
 const ZOOM_MAX := 2.0
 const ZOOM_STEP := 1.1
-# Region (screen coords) where wheel events are interpreted as zoom. Excludes
-# the hand strip at the bottom so scrolling there doesn't zoom the play area.
+# Region (screen coords) where wheel events are interpreted as zoom and where
+# left-button drag-pan is initiated. Excludes the hand strip at the bottom so
+# scrolling there doesn't zoom the play area.
 const ZOOM_REGION := Rect2(0, 50, 1280, 510)
+
+# Drag-to-pan: a left-button press on the background within ZOOM_REGION starts
+# tracking, but pan only commits once the cursor has moved this many pixels.
+# That way a click on a pile click-area inside ZOOM_REGION (e.g. PlanetDeck)
+# doesn't jiggle the view when the user just meant to open its viewer.
+const PAN_DRAG_THRESHOLD := 4.0
+
+enum PanState { IDLE, PENDING, ACTIVE }
 
 @onready var _planets_container: Node2D = $Planets
 @onready var _routes_container: Node2D = $Routes
 
 var _planet_deck_position: Vector2 = Vector2(1180, 40)
 
+var _pan_state: int = PanState.IDLE
+var _pan_start_screen: Vector2 = Vector2.ZERO
+var _pan_start_position: Vector2 = Vector2.ZERO
+
+# Set by main.gd. Read to defer to hand interactions (a hovered card, or a
+# modal that paused the hand) when deciding whether to start a pan.
+var hand: Node = null
+
 func set_planet_deck_position(world_pos: Vector2) -> void:
 	_planet_deck_position = world_pos
 
 func _unhandled_input(event: InputEvent) -> void:
-	if not (event is InputEventMouseButton):
-		return
-	if not event.pressed:
-		return
-	if not ZOOM_REGION.has_point(event.position):
-		return
-	if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-		_zoom_at(event.position, ZOOM_STEP)
-	elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-		_zoom_at(event.position, 1.0 / ZOOM_STEP)
+	if event is InputEventMouseButton:
+		var mb: InputEventMouseButton = event
+		if mb.button_index == MOUSE_BUTTON_LEFT:
+			if mb.pressed:
+				if _can_start_pan(mb.position):
+					_pan_state = PanState.PENDING
+					_pan_start_screen = mb.position
+					_pan_start_position = position
+			else:
+				_pan_state = PanState.IDLE
+			return
+		if not mb.pressed:
+			return
+		if not ZOOM_REGION.has_point(mb.position):
+			return
+		if mb.button_index == MOUSE_BUTTON_WHEEL_UP:
+			_zoom_at(mb.position, ZOOM_STEP)
+		elif mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			_zoom_at(mb.position, 1.0 / ZOOM_STEP)
+	elif event is InputEventMouseMotion and _pan_state != PanState.IDLE:
+		var mm: InputEventMouseMotion = event
+		var delta: Vector2 = mm.position - _pan_start_screen
+		if _pan_state == PanState.PENDING:
+			if delta.length() < PAN_DRAG_THRESHOLD:
+				return
+			_pan_state = PanState.ACTIVE
+		position = _pan_start_position + delta
+
+func _can_start_pan(screen_pos: Vector2) -> bool:
+	# Press initiates a pan only if the click would otherwise hit the empty
+	# background. Planet clicks (Area2D) and hand-card drags both arrive on
+	# the same press event, so we explicitly defer to them here — a planet
+	# under the cursor or a hovered hand card means the click belongs to
+	# them, not us.
+	if not ZOOM_REGION.has_point(screen_pos):
+		return false
+	if get_planet_under_cursor(screen_pos) != null:
+		return false
+	if hand != null:
+		if bool(hand.get("input_paused")):
+			return false
+		if hand.has_method("has_hovered_card") and hand.has_hovered_card():
+			return false
+	return true
 
 func _zoom_at(screen_pos: Vector2, factor: float) -> void:
 	# Anchor the zoom so the play-space point currently rendered at
@@ -144,22 +186,23 @@ func _on_planet_clicked(planet) -> void:
 	planet_clicked.emit(planet)
 
 func _find_non_overlapping_position() -> Vector2:
-	var existing: Array = []
+	# A new planet has no buildings yet, so its candidate AABB is just the
+	# 120×168 body footprint, separation-padded. We check that footprint
+	# against every existing planet's full (body + stack) world bounds so
+	# the random emitter respects the same boundary the drag code does.
+	var existing_bounds: Array = []
 	for child in _planets_container.get_children():
 		if child is PlanetCard:
-			existing.append(child.global_position)
+			existing_bounds.append(child.get_world_bounds())
+	var pad: float = PlanetCard.SEPARATION_PADDING
 	for _i in PLACEMENT_TRIES:
 		var c := Vector2(
 			randf_range(SETTLE_X_RANGE.x, SETTLE_X_RANGE.y),
 			randf_range(SETTLE_Y_RANGE.x, SETTLE_Y_RANGE.y))
-		var ok := true
-		for ep in existing:
-			if c.distance_to(ep) < COLLISION_RADIUS * 2.0:
-				ok = false
-				break
-		if ok:
+		var candidate := _candidate_body_bounds(c)
+		if _candidate_clear(candidate, existing_bounds, pad):
 			return c
-	# Fallback: pick the candidate furthest from all existing planets.
+	# Fallback: pick the candidate furthest from all existing planet centers.
 	var best := Vector2((SETTLE_X_RANGE.x + SETTLE_X_RANGE.y) * 0.5,
 		(SETTLE_Y_RANGE.x + SETTLE_Y_RANGE.y) * 0.5)
 	var best_min_dist := -1.0
@@ -168,12 +211,25 @@ func _find_non_overlapping_position() -> Vector2:
 			randf_range(SETTLE_X_RANGE.x, SETTLE_X_RANGE.y),
 			randf_range(SETTLE_Y_RANGE.x, SETTLE_Y_RANGE.y))
 		var min_d := INF
-		for ep in existing:
-			min_d = minf(min_d, c.distance_to(ep))
+		for eb in existing_bounds:
+			var ec: Vector2 = eb.position + eb.size * 0.5
+			min_d = minf(min_d, c.distance_to(ec))
 		if min_d > best_min_dist:
 			best_min_dist = min_d
 			best = c
 	return best
+
+static func _candidate_body_bounds(center: Vector2) -> Rect2:
+	# World-space AABB for a fresh (no-buildings) planet centred at `center`.
+	return Rect2(center - PlanetCard.BODY_HALF, PlanetCard.SIZE)
+
+static func _candidate_clear(candidate: Rect2, existing_bounds: Array, pad: float) -> bool:
+	var inflated: Rect2 = candidate.grow(pad * 0.5)
+	for eb in existing_bounds:
+		var other: Rect2 = (eb as Rect2).grow(pad * 0.5)
+		if inflated.intersects(other):
+			return false
+	return true
 
 # ---------------------------------------------------------------------------
 # Trade route visuals (Phase 7 wiring lives in main.gd)
