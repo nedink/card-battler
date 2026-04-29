@@ -31,20 +31,12 @@ const SPIN_REVOLUTIONS := 2.0
 # any cards still settling at the showcase line.
 const ARC_Z_BUMP := 1000
 
-# Card body backgrounds vary by primary cost resource so the card reads at a
-# glance as a Credits or Research card. Free cards (cost 0) have no primary
-# resource and stay on the neutral cream palette.
 const NEUTRAL_BG := Color(0.95, 0.92, 0.82)
 const NEUTRAL_HOVER_BG := Color(1.0, 0.96, 0.86)
-const CREDITS_BG := Color(1.0, 0.93, 0.7)
-const CREDITS_HOVER_BG := Color(1.0, 0.97, 0.78)
-const RESEARCH_BG := Color(0.88, 0.84, 1.0)
-const RESEARCH_HOVER_BG := Color(0.94, 0.92, 1.0)
 const PLAY_BG := Color(0.82, 0.98, 0.82)
 const NORMAL_BORDER := Color(0.15, 0.12, 0.08)
 const HOVER_BORDER := Color(1.0, 0.85, 0.2)
 const PLAY_BORDER := Color(0.25, 0.85, 0.35)
-const UNAFFORDABLE_MODULATE := Color(0.55, 0.55, 0.65)
 
 enum State { IDLE, DRAGGING, FLYING, SETTLED_BUILDING }
 enum FlyPhase { NONE, SETTLE, ARC }
@@ -52,36 +44,21 @@ enum FlyPhase { NONE, SETTLE, ARC }
 @onready var _body: Panel = $Body
 @onready var _name_label: Label = $Body/NameLabel
 @onready var _body_label: Label = get_node_or_null("Body/NameLabel2")
-@onready var _cost_icons: Control = $Body/CostIcons
 
-# Cost-icon visuals. Each point of cost spawns one circular icon stacked
-# right-to-left on top of the card. The rightmost icon is fully visible; each
-# subsequent one peeks out from behind by ICON_VISIBLE_STEP pixels, creating
-# a stacked-chip look that scales with cost.
-const COST_ICON_DIAMETER := 26
-# Anchor of the rightmost icon, in CostIcons-local coords (CostIcons spans the
-# top of Body width). Right edge of the rightmost icon sits ~3px in from the
-# Body's right edge.
-const COST_ICON_RIGHT_X := 117
-const COST_ICON_TOP_Y := 0
-# How much of each new icon is visible past the one in front of it.
-const ICON_VISIBLE_STEP := 11
+# Shrink text based on character count. Each row is [max_chars, font_size];
+# the first row whose max_chars >= length wins. The last row's max_chars is
+# effectively the floor (anything longer uses its size).
+const NAME_FONT_SIZES := [[12, 18], [14, 16], [999, 14]]
+const BODY_FONT_SIZES := [[25, 13], [40, 12], [999, 11]]
+
+var _body_label_settings: LabelSettings = null
 
 var card_name: String = "Strike":
 	set(value):
 		card_name = value
 		if is_node_ready():
 			_name_label.text = value
-
-var cost: int = 1:
-	set(value):
-		cost = value
-		if is_node_ready():
-			_rebuild_cost_icons()
-
-# Which resource the cost is paid from. "credits" for most cards, "research"
-# for trade routes. Used to build the cost dict passed to GameState.can_afford().
-var cost_resource: String = "credits"
+			_name_label.add_theme_font_size_override("font_size", _font_size_for(value.length(), NAME_FONT_SIZES))
 
 # Logical card kind — see CardType enum. Trade Route and Discover use the
 # threshold-release flow; the BUILD_* variants drag-onto-planet instead.
@@ -98,10 +75,10 @@ var body_text: String = "":
 		body_text = value
 		if is_node_ready() and _body_label != null:
 			_body_label.text = value
+			_body_label_settings.font_size = _font_size_for(value.length(), BODY_FONT_SIZES)
 
 var hovered: bool = false
 var play_ready: bool = false
-var affordable: bool = true
 var rest_position: Vector2 = Vector2.ZERO
 var rest_rotation: float = 0.0
 
@@ -122,63 +99,20 @@ func _ready() -> void:
 	_body_stylebox = (_body.get_theme_stylebox("panel") as StyleBoxFlat).duplicate()
 	_body.add_theme_stylebox_override("panel", _body_stylebox)
 	_name_label.text = card_name
+	_name_label.add_theme_font_size_override("font_size", _font_size_for(card_name.length(), NAME_FONT_SIZES))
 	if _body_label != null:
+		# Duplicate so per-card font_size changes don't leak into other cards.
+		_body_label_settings = _body_label.label_settings.duplicate()
+		_body_label.label_settings = _body_label_settings
 		_body_label.text = body_text
-	_rebuild_cost_icons()
+		_body_label_settings.font_size = _font_size_for(body_text.length(), BODY_FONT_SIZES)
 	_refresh_visual()
 
-func cost_dict() -> Dictionary:
-	# Convenience for GameState.can_afford / deduct.
-	return { cost_resource: cost }
-
-func _cost_icon_colors() -> Array:
-	# (bg, border) for the resource the cost is paid from. Fill colors mirror
-	# the HUD label colors so the cost reads as the same resource at a glance:
-	#   Credits  → soft gold     (matches HUD "Credits"  label)
-	#   Research → light lavender (matches HUD "Research" label)
-	# Borders are a deep version of the same hue for contrast on the
-	# cream-colored card body.
-	if cost_resource == "research":
-		return [Color(0.85, 0.7, 1.0), Color(0.3, 0.15, 0.5)]
-	return [Color(1.0, 0.95, 0.6), Color(0.5, 0.4, 0.05)]
-
-func _rebuild_cost_icons() -> void:
-	# Spawn one circular pip per point of `cost`, stacked right-to-left and
-	# slightly behind each other (rightmost on top). Cost 0 → no icons.
-	if _cost_icons == null:
-		return
-	for c in _cost_icons.get_children():
-		c.queue_free()
-	if cost <= 0:
-		return
-	var colors := _cost_icon_colors()
-	var bg: Color = colors[0]
-	var border: Color = colors[1]
-	# Add deepest-back icon first so child order matches draw order: later
-	# children render on top, so the rightmost icon (i = 0 here) ends up last
-	# and on top of the stack.
-	for i in range(cost - 1, -1, -1):
-		var pip := Panel.new()
-		pip.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		pip.size = Vector2(COST_ICON_DIAMETER, COST_ICON_DIAMETER)
-		# i = 0 is rightmost; higher i sits further left and behind.
-		pip.position = Vector2(
-			COST_ICON_RIGHT_X - COST_ICON_DIAMETER - i * ICON_VISIBLE_STEP,
-			COST_ICON_TOP_Y)
-		var sb := StyleBoxFlat.new()
-		sb.bg_color = bg
-		sb.border_color = border
-		sb.border_width_left = 2
-		sb.border_width_top = 2
-		sb.border_width_right = 2
-		sb.border_width_bottom = 2
-		var radius: int = COST_ICON_DIAMETER / 2
-		sb.corner_radius_top_left = radius
-		sb.corner_radius_top_right = radius
-		sb.corner_radius_bottom_left = radius
-		sb.corner_radius_bottom_right = radius
-		pip.add_theme_stylebox_override("panel", sb)
-		_cost_icons.add_child(pip)
+static func _font_size_for(length: int, table: Array) -> int:
+	for entry in table:
+		if length <= entry[0]:
+			return entry[1]
+	return table[-1][1]
 
 func set_rest(pos: Vector2, rot: float) -> void:
 	rest_position = pos
@@ -196,55 +130,29 @@ func set_play_ready(value: bool) -> void:
 	play_ready = value
 	_refresh_visual()
 
-func set_affordable(value: bool) -> void:
-	if affordable == value:
-		return
-	affordable = value
-	_refresh_visual()
-
-func configure(p_name: String, p_type: int, p_cost: int, p_resource: String, p_body: String) -> void:
+func configure(p_name: String, p_type: int, p_body: String) -> void:
 	# Bulk setter so main.gd can spawn cards with one call from a definition dict.
 	card_name = p_name
 	card_type = p_type
-	# Set resource before cost so the cost setter, which rebuilds icons, picks
-	# up the correct color the first time.
-	cost_resource = p_resource
-	cost = p_cost
 	body_text = p_body
 	targets_planet = (p_type == CardType.BUILD_COLONY \
 		or p_type == CardType.BUILD_FACTORY \
 		or p_type == CardType.BUILD_LAB \
 		or p_type == CardType.BUILD_POWER_PLANT)
-	if is_node_ready():
-		_rebuild_cost_icons()
 
 func _refresh_visual() -> void:
 	if _body_stylebox == null:
 		return
-	var bg_colors := _bg_colors_for_resource()
 	# play_ready takes precedence — it only applies during drag, when hover is off anyway.
 	if play_ready:
 		_body_stylebox.bg_color = PLAY_BG
 		_body_stylebox.border_color = PLAY_BORDER
 	elif hovered:
-		_body_stylebox.bg_color = bg_colors[1]
+		_body_stylebox.bg_color = NEUTRAL_HOVER_BG
 		_body_stylebox.border_color = HOVER_BORDER
 	else:
-		_body_stylebox.bg_color = bg_colors[0]
+		_body_stylebox.bg_color = NEUTRAL_BG
 		_body_stylebox.border_color = NORMAL_BORDER
-	# Unaffordable cards desaturate via modulate so the gray tint applies on top
-	# of whichever stylebox is active above.
-	modulate = Color.WHITE if affordable else UNAFFORDABLE_MODULATE
-
-func _bg_colors_for_resource() -> Array:
-	# Tint the card body to match its primary cost resource. Free cards (cost
-	# 0, no primary resource) stay on the neutral cream so they read as
-	# distinct from paid cards.
-	if cost <= 0:
-		return [NEUTRAL_BG, NEUTRAL_HOVER_BG]
-	if cost_resource == "research":
-		return [RESEARCH_BG, RESEARCH_HOVER_BG]
-	return [CREDITS_BG, CREDITS_HOVER_BG]
 
 func start_drag() -> void:
 	_kill_fly_tween()

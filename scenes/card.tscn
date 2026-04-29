@@ -5,15 +5,13 @@
 
 [sub_resource type="StyleBoxFlat" id="StyleBoxFlat_body"]
 bg_color = Color(0.95, 0.92, 0.82, 1)
-border_width_left = 3
-border_width_top = 3
-border_width_right = 3
-border_width_bottom = 3
-border_color = Color(0.15, 0.12, 0.08, 1)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
 corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
+shadow_color = Color(0.07, 0.08, 0.12, 0.45)
+shadow_size = 8
+shadow_offset = Vector2(0, 3)
 
 [sub_resource type="LabelSettings" id="LabelSettings_6u4wf"]
 line_spacing = -5.0
@@ -55,13 +53,6 @@ theme_override_font_sizes/font_size = 18
 text = "Deal 6 damage"
 label_settings = SubResource("LabelSettings_6u4wf")
 autowrap_mode = 3
-
-[node name="CostIcons" type="Control" parent="Body" unique_id=1503156429]
-anchors_preset = 0
-offset_top = -10.0
-offset_right = 120.0
-offset_bottom = 18.0
-mouse_filter = 2
 
 [node name="Sprite2D" type="Sprite2D" parent="." unique_id=2052605753]
 position = Vector2(0, -26.000002)

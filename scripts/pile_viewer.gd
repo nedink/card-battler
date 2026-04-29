@@ -40,9 +40,9 @@ func _ready() -> void:
 func is_open() -> bool:
 	return visible
 
-# `entries` is an Array of Dictionaries with keys {name, type, cost, resource,
-# body}, where "type" is the Card.CardType int. main.gd assembles them from
-# CARD_LIBRARY so this script doesn't have to know about CardData.
+# `entries` is an Array of Dictionaries with keys {name, type, body}, where
+# "type" is the Card.CardType int. main.gd assembles them from CARD_LIBRARY
+# so this script doesn't have to know about CardData.
 func show_pile(title: String, entries: Array) -> void:
 	_title.text = title
 	for c in _cards_root.get_children():
@@ -69,8 +69,6 @@ func show_pile(title: String, entries: Array) -> void:
 			card.configure(
 				String(def.get("name", "?")),
 				int(def.get("type", 0)),
-				int(def.get("cost", 0)),
-				String(def.get("resource", "credits")),
 				String(def.get("body", "")))
 			card.scale = Vector2(CARD_SCALE, CARD_SCALE)
 			var col: int = i % CARDS_PER_ROW
