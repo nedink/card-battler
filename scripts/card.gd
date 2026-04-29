@@ -31,8 +31,15 @@ const SPIN_REVOLUTIONS := 2.0
 # any cards still settling at the showcase line.
 const ARC_Z_BUMP := 1000
 
-const NORMAL_BG := Color(0.95, 0.92, 0.82)
-const HOVER_BG := Color(1.0, 0.96, 0.86)
+# Card body backgrounds vary by primary cost resource so the card reads at a
+# glance as a Credits or Research card. Free cards (cost 0) have no primary
+# resource and stay on the neutral cream palette.
+const NEUTRAL_BG := Color(0.95, 0.92, 0.82)
+const NEUTRAL_HOVER_BG := Color(1.0, 0.96, 0.86)
+const CREDITS_BG := Color(1.0, 0.93, 0.7)
+const CREDITS_HOVER_BG := Color(1.0, 0.97, 0.78)
+const RESEARCH_BG := Color(0.88, 0.84, 1.0)
+const RESEARCH_HOVER_BG := Color(0.94, 0.92, 1.0)
 const PLAY_BG := Color(0.82, 0.98, 0.82)
 const NORMAL_BORDER := Color(0.15, 0.12, 0.08)
 const HOVER_BORDER := Color(1.0, 0.85, 0.2)
@@ -214,19 +221,30 @@ func configure(p_name: String, p_type: int, p_cost: int, p_resource: String, p_b
 func _refresh_visual() -> void:
 	if _body_stylebox == null:
 		return
+	var bg_colors := _bg_colors_for_resource()
 	# play_ready takes precedence — it only applies during drag, when hover is off anyway.
 	if play_ready:
 		_body_stylebox.bg_color = PLAY_BG
 		_body_stylebox.border_color = PLAY_BORDER
 	elif hovered:
-		_body_stylebox.bg_color = HOVER_BG
+		_body_stylebox.bg_color = bg_colors[1]
 		_body_stylebox.border_color = HOVER_BORDER
 	else:
-		_body_stylebox.bg_color = NORMAL_BG
+		_body_stylebox.bg_color = bg_colors[0]
 		_body_stylebox.border_color = NORMAL_BORDER
 	# Unaffordable cards desaturate via modulate so the gray tint applies on top
 	# of whichever stylebox is active above.
 	modulate = Color.WHITE if affordable else UNAFFORDABLE_MODULATE
+
+func _bg_colors_for_resource() -> Array:
+	# Tint the card body to match its primary cost resource. Free cards (cost
+	# 0, no primary resource) stay on the neutral cream so they read as
+	# distinct from paid cards.
+	if cost <= 0:
+		return [NEUTRAL_BG, NEUTRAL_HOVER_BG]
+	if cost_resource == "research":
+		return [RESEARCH_BG, RESEARCH_HOVER_BG]
+	return [CREDITS_BG, CREDITS_HOVER_BG]
 
 func start_drag() -> void:
 	_kill_fly_tween()

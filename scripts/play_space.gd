@@ -33,6 +33,15 @@ const SETTLE_Y_RANGE := Vector2(380, 470)
 const EMIT_ARC_PEAK := 140.0
 const EMIT_DURATION := 0.55
 
+# Mouse-wheel zoom on the play space. Scaling happens around the cursor so
+# the world point under the mouse stays put.
+const ZOOM_MIN := 0.5
+const ZOOM_MAX := 2.0
+const ZOOM_STEP := 1.1
+# Region (screen coords) where wheel events are interpreted as zoom. Excludes
+# the hand strip at the bottom so scrolling there doesn't zoom the play area.
+const ZOOM_REGION := Rect2(0, 50, 1280, 510)
+
 @onready var _planets_container: Node2D = $Planets
 @onready var _routes_container: Node2D = $Routes
 
@@ -40,6 +49,31 @@ var _planet_deck_position: Vector2 = Vector2(1180, 40)
 
 func set_planet_deck_position(world_pos: Vector2) -> void:
 	_planet_deck_position = world_pos
+
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventMouseButton):
+		return
+	if not event.pressed:
+		return
+	if not ZOOM_REGION.has_point(event.position):
+		return
+	if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+		_zoom_at(event.position, ZOOM_STEP)
+	elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+		_zoom_at(event.position, 1.0 / ZOOM_STEP)
+
+func _zoom_at(screen_pos: Vector2, factor: float) -> void:
+	# Anchor the zoom so the play-space point currently rendered at
+	# screen_pos remains at screen_pos after the scale change. Derivation:
+	# screen = position + scale * local; want local fixed → new_position =
+	# screen - new_scale * (screen - position) / scale.
+	var current := scale.x
+	var target: float = clampf(current * factor, ZOOM_MIN, ZOOM_MAX)
+	if is_equal_approx(target, current):
+		return
+	var ratio := target / current
+	position = screen_pos + (position - screen_pos) * ratio
+	scale = Vector2(target, target)
 
 func get_planet_under_cursor(world_point: Vector2):
 	# Return the topmost PlanetCard under the cursor, or null. Topmost = last

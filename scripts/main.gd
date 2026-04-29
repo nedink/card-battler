@@ -28,9 +28,9 @@ const SHOWCASE_SLOT_SPACING := 110.0
 const SHOWCASE_Z_BASE := 1000
 
 # Initial resources.
-const STARTING_CREDITS := 5
-const STARTING_RESEARCH := 2
-const STARTING_ENERGY := 3
+const STARTING_CREDITS := 3
+const STARTING_RESEARCH := 0
+const STARTING_ENERGY := 0
 
 # Per-turn random event roll. 0 disables events; 1.0 forces one every turn.
 const EVENT_CHANCE := 0.5
@@ -43,12 +43,11 @@ const EVENT_CHANCE := 0.5
 const CARD_LIBRARY: CardLibrary = preload("res://data/card_library.tres")
 
 var STARTING_DECK := [
-	Card.CardType.DISCOVER, Card.CardType.DISCOVER, Card.CardType.DISCOVER, Card.CardType.DISCOVER,
-	Card.CardType.BUILD_COLONY, Card.CardType.BUILD_COLONY, Card.CardType.BUILD_COLONY, Card.CardType.BUILD_COLONY,
-	Card.CardType.BUILD_FACTORY, Card.CardType.BUILD_FACTORY, Card.CardType.BUILD_FACTORY,
-	Card.CardType.BUILD_LAB, Card.CardType.BUILD_LAB, Card.CardType.BUILD_LAB,
-	Card.CardType.BUILD_POWER_PLANT, Card.CardType.BUILD_POWER_PLANT, Card.CardType.BUILD_POWER_PLANT,
-	Card.CardType.TRADE_ROUTE, Card.CardType.TRADE_ROUTE, Card.CardType.TRADE_ROUTE,
+	Card.CardType.DISCOVER,
+	Card.CardType.BUILD_COLONY,
+	Card.CardType.BUILD_FACTORY,
+	Card.CardType.BUILD_LAB,
+	Card.CardType.BUILD_POWER_PLANT,
 ]
 
 # Planet pool lives in data/planet_library.tres — add/edit planet defs there.

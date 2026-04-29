@@ -1,6 +1,15 @@
 [gd_scene format=3 uid="uid://v6kyml1dbh1f"]
 
 [ext_resource type="Script" uid="uid://c5bgi00joxar0" path="res://scripts/planet_card.gd" id="1_pc"]
+[ext_resource type="Shader" path="res://shaders/planet_sphere.gdshader" id="2_sphere"]
+
+[sub_resource type="ShaderMaterial" id="SM_sphere"]
+shader = ExtResource("2_sphere")
+shader_parameter/base_color = Color(0.55, 0.42, 0.3, 1)
+shader_parameter/light_dir = Vector3(-0.45, -0.55, 0.7)
+shader_parameter/ambient = 0.18
+shader_parameter/rim_strength = 0.55
+shader_parameter/specular_strength = 0.45
 
 [sub_resource type="StyleBoxFlat" id="SB_body"]
 bg_color = Color(0.18, 0.22, 0.32, 1)
@@ -29,6 +38,7 @@ mouse_filter = 2
 theme_override_styles/panel = SubResource("SB_body")
 
 [node name="NameLabel" type="Label" parent="Body" unique_id=2132216204]
+z_index = 10
 layout_mode = 0
 offset_left = 6.0
 offset_top = 8.0
@@ -40,6 +50,7 @@ text = "Planet"
 horizontal_alignment = 1
 
 [node name="TypeLabel" type="Label" parent="Body" unique_id=326276342]
+z_index = 10
 layout_mode = 0
 offset_left = 6.0
 offset_top = 38.0
@@ -49,6 +60,15 @@ theme_override_colors/font_color = Color(0.75, 0.8, 0.9, 1)
 theme_override_font_sizes/font_size = 11
 text = "Rocky"
 horizontal_alignment = 1
+
+[node name="Sphere" type="ColorRect" parent="." unique_id=415270001]
+z_index = 2
+offset_left = -30.0
+offset_top = -114.0
+offset_right = 30.0
+offset_bottom = -54.0
+mouse_filter = 2
+material = SubResource("SM_sphere")
 
 [node name="Buildings" type="Node2D" parent="." unique_id=320798872]
 

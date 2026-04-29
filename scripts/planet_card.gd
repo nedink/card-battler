@@ -33,8 +33,20 @@ const BUILDING_STEP := 28.0
 @onready var _body: Panel = $Body
 @onready var _name_label: Label = $Body/NameLabel
 @onready var _type_label: Label = $Body/TypeLabel
+@onready var _sphere: ColorRect = $Sphere
 @onready var _buildings_root: Node2D = $Buildings
 @onready var _click_area: Area2D = $ClickArea
+
+# Per-type sphere base colors. The sphere shader lights this base color as a
+# fake 3D ball; multi-type planets average the entries below so e.g. an
+# "Ice/Oceanic" world reads as pale blue between cyan and deep blue.
+const TYPE_COLORS := {
+	"Rocky": Color(0.55, 0.42, 0.30),
+	"Oceanic": Color(0.20, 0.45, 0.85),
+	"Ice": Color(0.78, 0.92, 1.00),
+	"Gas Giant": Color(0.88, 0.66, 0.38),
+}
+const FALLBACK_TYPE_COLOR := Color(0.5, 0.5, 0.5)
 
 var data = null                       # GameState.PlanetData (typed Variant — autoload class)
 var targeted: bool = false
@@ -51,6 +63,16 @@ var _building_visuals: Array = []
 # at y≈580.
 const PLAY_BOUNDS := Rect2(80, 220, 1120, 260)
 
+# Min center-to-center distance between two planet bodies. Matches the
+# placement-search clearance in PlaySpace so dragging respects the same gap
+# the random emitter respects.
+const SEPARATION_RADIUS := 95.0
+
+# Only one planet can be dragged at a time. Tracked at class level so a
+# second planet's Area2D click (e.g. from overlapping click areas, or a fast
+# user clicking another planet mid-drag) is ignored.
+static var _active_dragger: PlanetCard = null
+
 var _dragging: bool = false
 var _drag_offset: Vector2 = Vector2.ZERO
 var _body_stylebox: StyleBoxFlat = null
@@ -58,12 +80,14 @@ var _body_stylebox: StyleBoxFlat = null
 func _ready() -> void:
 	_body_stylebox = (_body.get_theme_stylebox("panel") as StyleBoxFlat).duplicate()
 	_body.add_theme_stylebox_override("panel", _body_stylebox)
+	# The sphere material is a sub-resource shared by every PlanetCard instance
+	# in the scene file. Duplicate so each planet's base_color is independent.
+	if _sphere != null and _sphere.material != null:
+		_sphere.material = _sphere.material.duplicate()
 	_click_area.input_event.connect(_on_input_event)
-	# Buildings render behind the planet body so the planet is always the
-	# bottom card of the visual stack. Inter-building order is set per-card
-	# by attach_building_card so older cards cover newer ones — newest sits
-	# at the very back.
-	_buildings_root.z_index = -1
+	# Buildings render above the planet body. Inter-building order is set
+	# per-card by attach_building_card so newer cards sit on top.
+	_buildings_root.z_index = 1
 	_refresh_visual()
 	if data != null:
 		refresh_from_data()
@@ -83,6 +107,32 @@ func refresh_from_data() -> void:
 		_name_label.text = data.planet_name
 	if _type_label != null:
 		_type_label.text = data.planet_type
+	_apply_sphere_color()
+
+func _apply_sphere_color() -> void:
+	if _sphere == null or data == null:
+		return
+	var mat: ShaderMaterial = _sphere.material as ShaderMaterial
+	if mat == null:
+		return
+	mat.set_shader_parameter("base_color", _combined_type_color(data.planet_type))
+
+func _combined_type_color(type_string: String) -> Color:
+	# Splits the planet_type field on "/" or "," so a future multi-type planet
+	# (e.g. "Ice/Oceanic") averages each component's color. Single-type strings
+	# fall through to a one-entry average and look up unchanged.
+	var parts := []
+	for raw in type_string.replace("/", ",").split(","):
+		var t := raw.strip_edges()
+		if t != "":
+			parts.append(t)
+	if parts.is_empty():
+		return FALLBACK_TYPE_COLOR
+	var sum := Color(0, 0, 0, 0)
+	for t in parts:
+		sum += TYPE_COLORS.get(t, FALLBACK_TYPE_COLOR)
+	var inv := 1.0 / float(parts.size())
+	return Color(sum.r * inv, sum.g * inv, sum.b * inv, 1.0)
 
 func attach_building_card(card: Card) -> void:
 	# Take ownership of `card` as a permanent building visual. The card was
@@ -96,9 +146,9 @@ func attach_building_card(card: Card) -> void:
 	_building_visuals.append(card)
 	var index := _building_visuals.size() - 1
 	card.settle_into_building_slot(_building_slot_local(index), BUILDING_CARD_SCALE)
-	# Older cards (lower index) sit in front; the newest card lands at the
-	# back. settle_into_building_slot resets z_index to 0, so set after.
-	card.z_index = -index
+	# Newer cards (higher index) sit in front. settle_into_building_slot
+	# resets z_index to 0, so set after.
+	card.z_index = index
 
 func remove_building_visual_at(index: int) -> void:
 	# Free the visual at `index` and re-tween any cards beneath it upward to
@@ -113,16 +163,16 @@ func remove_building_visual_at(index: int) -> void:
 		var c: Card = _building_visuals[i]
 		if is_instance_valid(c):
 			c.settle_into_building_slot(_building_slot_local(i), BUILDING_CARD_SCALE)
-			c.z_index = -i
+			c.z_index = i
 
 func _building_slot_local(index: int) -> Vector2:
 	# Local position (in _buildings_root coords) where the card centred at
-	# slot `index` should sit. Buildings stack ABOVE the planet: each card's
-	# top is BUILDING_STEP px above the previous card's top. Card 0 sits so
-	# its top is BUILDING_STEP above the planet body's top edge, leaving a
-	# clean STEP-tall peek for every card above the planet.
-	var top_y := -BODY_HALF.y - float(index + 1) * BUILDING_STEP
-	return Vector2(0.0, top_y + Card.SIZE.y * 0.5)
+	# slot `index` should sit. Buildings stack BELOW the planet: each card's
+	# bottom is BUILDING_STEP px below the previous card's bottom. Card 0
+	# sits so its bottom is BUILDING_STEP below the planet body's bottom
+	# edge, leaving a clean STEP-tall peek for every card below the planet.
+	var bottom_y := BODY_HALF.y + float(index + 1) * BUILDING_STEP
+	return Vector2(0.0, bottom_y - Card.SIZE.y * 0.5)
 
 func set_targeted(value: bool) -> void:
 	if targeted == value:
@@ -172,16 +222,17 @@ func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> voi
 		# emitting the signal up the chain), and the start of a drag-to-move.
 		# Listeners decide based on game phase.
 		planet_clicked.emit(self)
-		if draggable_in_bounds:
+		if draggable_in_bounds and _active_dragger == null:
 			_dragging = true
+			_active_dragger = self
 			_drag_offset = global_position - get_global_mouse_position()
 	else:
-		_dragging = false
+		_end_drag()
 
 func _process(_delta: float) -> void:
 	if _dragging:
 		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
-			_dragging = false
+			_end_drag()
 			return
 		var target := get_global_mouse_position() + _drag_offset
 		target.x = clampf(target.x, PLAY_BOUNDS.position.x, PLAY_BOUNDS.position.x + PLAY_BOUNDS.size.x)
@@ -189,6 +240,34 @@ func _process(_delta: float) -> void:
 		global_position = target
 		if data != null:
 			data.position = target
+		_push_overlapping_siblings()
+
+func _end_drag() -> void:
+	_dragging = false
+	if _active_dragger == self:
+		_active_dragger = null
+
+func _push_overlapping_siblings() -> void:
+	# Push any sibling PlanetCard out of the way along the line between us so
+	# the player can sweep planets around without stacking them. Each pushed
+	# sibling is also clamped to PLAY_BOUNDS; if the clamp leaves it still
+	# overlapping (cluster of planets in a corner), the next frame of motion
+	# will continue to nudge it.
+	var min_dist := SEPARATION_RADIUS * 2.0
+	for sib in get_parent().get_children():
+		if sib == self or not (sib is PlanetCard):
+			continue
+		var diff: Vector2 = sib.global_position - global_position
+		var dist := diff.length()
+		if dist >= min_dist:
+			continue
+		var dir: Vector2 = diff / dist if dist > 0.001 else Vector2.RIGHT
+		var new_pos: Vector2 = global_position + dir * min_dist
+		new_pos.x = clampf(new_pos.x, PLAY_BOUNDS.position.x, PLAY_BOUNDS.position.x + PLAY_BOUNDS.size.x)
+		new_pos.y = clampf(new_pos.y, PLAY_BOUNDS.position.y, PLAY_BOUNDS.position.y + PLAY_BOUNDS.size.y)
+		sib.global_position = new_pos
+		if sib.data != null:
+			sib.data.position = new_pos
 
 func contains_point(world_point: Vector2) -> bool:
 	# Hit test for "card under cursor" while dragging a player card. Only the
