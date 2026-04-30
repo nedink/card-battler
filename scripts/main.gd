@@ -55,22 +55,12 @@ const PLANET_LIBRARY: PlanetLibrary = preload("res://data/planet_library.tres")
 # and dispatch by type: a PlanetData (with a "planet" or "alien_ship" tag) goes
 # to the play space; a CardData goes to the on-board Journal as a stacked entry.
 # Journal entries dominate by count to give the deck its narrative texture.
-const JOURNAL_ENTRIES: Array[String] = [
-	"Day 12: The horizon hums faintly at dusk.",
-	"Day 27: A core sample comes back warm. Curious.",
-	"Day 41: The probe returned without its antenna.",
-	"Day 58: We've started naming the stars after the dead.",
-	"Day 73: Children claim the soil sings to them.",
-	"Day 92: A lattice of glass found beneath the ice.",
-	"Day 110: The captain has not slept in nine days.",
-	"Day 134: Old radio static, in a regular pattern.",
-	"Day 151: Two moons rose tonight. There should be one.",
-	"Day 175: We have learned not to dream loudly.",
-	"Day 192: A new word in the manifest: 'meridian.'",
-	"Day 218: The well runs upward when no one watches.",
-	"Day 240: Comms cut. We continue.",
-	"Day 263: The hull remembers more than we do.",
-]
+#
+# Journal text is loaded from a sidecar file and revealed in strict sequential
+# order, regardless of where the journal-entry cards land in the shuffled
+# discovery deck. The cards seeded into the deck are anonymous placeholders;
+# their body is assigned at reveal time from `_journal_entries[_next_journal_index]`.
+const JOURNAL_ENTRIES_PATH := "res://data/journal_entries.txt"
 const ALIEN_SHIP_NAMES: Array[String] = [
 	"Drifting Hulk",
 	"Silent Vessel",
@@ -96,6 +86,8 @@ var _showcasing: Array[Card] = []
 var _play_counter: int = 0
 var _turn_transitioning: bool = false
 var _next_planet_id: int = 0
+var _journal_entries: Array[String] = []
+var _next_journal_index: int = 0
 
 func _ready() -> void:
 	Engine.time_scale = TIME_SCALE
@@ -124,6 +116,9 @@ func _init_game_state() -> void:
 
 	GameState.player_deck = STARTING_DECK.duplicate()
 	GameState.player_deck.shuffle()
+
+	_journal_entries = _load_journal_entries()
+	_next_journal_index = 0
 
 	# Planets first: shuffled, with one rocky world reserved as the Homeworld.
 	var planet_pool: Array = []
@@ -156,8 +151,8 @@ func _init_game_state() -> void:
 		discovery.append(p)
 	for ship_name in ALIEN_SHIP_NAMES:
 		discovery.append(_make_alien_ship_data(ship_name))
-	for text in JOURNAL_ENTRIES:
-		discovery.append(_make_journal_entry_card(text))
+	for i in range(_journal_entries.size()):
+		discovery.append(_make_journal_entry_card())
 	discovery.shuffle()
 
 	GameState.planet_deck_data = discovery
@@ -190,17 +185,33 @@ func _make_alien_ship_data(ship_name: String) -> GameState.PlanetData:
 	_next_planet_id += 1
 	return pd
 
-func _make_journal_entry_card(text: String) -> CardData:
-	# Builds a one-off CardData at runtime for each journal-entry slot in the
-	# discovery deck. card_types/can_stack carry the "journal" tag so the entry
-	# stacks onto the journal anchor and onto previously-revealed entries.
+func _make_journal_entry_card() -> CardData:
+	# Builds an anonymous journal-entry slot for the discovery deck. The body
+	# is intentionally empty here — text is assigned at reveal time from the
+	# sequential journal-entry list, so entries stay in order even though the
+	# discovery deck is shuffled. card_types/can_stack carry the "journal" tag
+	# so the entry stacks onto the journal anchor and onto previously-revealed
+	# entries.
 	var cd := CardData.new()
 	cd.card_name = "Journal"
-	cd.body = text
+	cd.body = ""
 	var tags: Array[String] = ["journal"]
 	cd.card_types = tags
 	cd.can_stack = tags.duplicate()
 	return cd
+
+func _load_journal_entries() -> Array[String]:
+	var entries: Array[String] = []
+	var f := FileAccess.open(JOURNAL_ENTRIES_PATH, FileAccess.READ)
+	if f == null:
+		push_error("Journal entries file missing: %s" % JOURNAL_ENTRIES_PATH)
+		return entries
+	while not f.eof_reached():
+		var line := f.get_line().strip_edges()
+		if line != "":
+			entries.append(line)
+	f.close()
+	return entries
 
 func _start_first_turn() -> void:
 	_run_draw_phase()
@@ -249,6 +260,9 @@ func _discover_one() -> void:
 	var entry = GameState.planet_deck_data.pop_back()
 	planet_deck.cards_remaining = GameState.planet_deck_data.size()
 	if entry is CardData:
+		if "journal" in entry.card_types and _next_journal_index < _journal_entries.size():
+			entry.body = _journal_entries[_next_journal_index]
+			_next_journal_index += 1
 		play_space.emit_journal_entry(entry)
 	elif entry is GameState.PlanetData:
 		GameState.planets.append(entry)
