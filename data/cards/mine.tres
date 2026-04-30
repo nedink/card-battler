@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://bqfngkhx7abq3"]
+
+[ext_resource type="Script" uid="uid://cclp6ov8d68s" path="res://scripts/card_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+card_name = "Mine"
+body = "Harvest metal ore."
+card_types = Array[String](["building", "mine"])
+can_stack = Array[String](["planet"])

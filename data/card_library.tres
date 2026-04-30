@@ -1,9 +1,21 @@
-[gd_resource type="Resource" script_class="CardLibrary" load_steps=4 format=3]
+[gd_resource type="Resource" script_class="CardLibrary" format=3 uid="uid://d5chp63q6r7k"]
 
-[ext_resource type="Script" path="res://scripts/card_library.gd" id="1"]
-[ext_resource type="Resource" path="res://data/cards/discover.tres" id="2"]
-[ext_resource type="Resource" path="res://data/cards/build_colony.tres" id="3"]
+[ext_resource type="Script" uid="uid://bc5xr6csxs5bo" path="res://scripts/card_library.gd" id="1"]
+[ext_resource type="Script" uid="uid://cclp6ov8d68s" path="res://scripts/card_data.gd" id="1_d2wkg"]
+[ext_resource type="Resource" uid="uid://ml3nunaviq3f" path="res://data/cards/build_colony.tres" id="3"]
+[ext_resource type="Resource" uid="uid://cf5pr5oibuohk" path="res://data/cards/farm.tres" id="4"]
+[ext_resource type="Resource" uid="uid://d1p40oe6y6vu6" path="res://data/cards/fishery.tres" id="5"]
+[ext_resource type="Resource" uid="uid://rcouuwhkd0dn" path="res://data/cards/lumber_mill.tres" id="6"]
+[ext_resource type="Resource" uid="uid://bqfngkhx7abq3" path="res://data/cards/mine.tres" id="7"]
+[ext_resource type="Resource" uid="uid://bfycbytm14m48" path="res://data/cards/quarry.tres" id="8"]
+[ext_resource type="Resource" uid="uid://dtynwh2qjrhrs" path="res://data/cards/oil_derrick.tres" id="9"]
+[ext_resource type="Resource" uid="uid://b7solrarry0hv" path="res://data/cards/solar_array.tres" id="10"]
+[ext_resource type="Resource" uid="uid://bmqhknvdskl01" path="res://data/cards/coal_mine.tres" id="11"]
+[ext_resource type="Resource" uid="uid://caaqufrpmp0hv" path="res://data/cards/aquifer_pump.tres" id="12"]
+[ext_resource type="Resource" uid="uid://d3jbvd2lcehtw" path="res://data/cards/salt_flat.tres" id="13"]
+[ext_resource type="Resource" uid="uid://8y0gxd5ux4n0" path="res://data/cards/nitrogen_fixer.tres" id="14"]
+[ext_resource type="Resource" path="res://data/cards/contact.tres" id="15"]
 
 [resource]
 script = ExtResource("1")
-cards = Array[CardData]([ExtResource("2"), ExtResource("3")])
+cards = Array[ExtResource("1_d2wkg")]([ExtResource("3"), ExtResource("4"), ExtResource("5"), ExtResource("6"), ExtResource("7"), ExtResource("8"), ExtResource("9"), ExtResource("10"), ExtResource("11"), ExtResource("12"), ExtResource("13"), ExtResource("14"), ExtResource("15")])

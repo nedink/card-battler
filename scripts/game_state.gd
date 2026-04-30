@@ -32,6 +32,10 @@ class BuildingData:
 	# tags and effects.
 	var source: CardData
 	var card_types: Array            # Snapshot of source.card_types — what the next stacker tests against
+	# Turns this building has been alive on the planet. Incremented at the
+	# start of each turn (see main.gd `_age_buildings`). Used by colony cards
+	# to drive the every-5-turns draft.
+	var turns_alive: int = 0
 
 	func _init(p_source: CardData = null) -> void:
 		source = p_source

@@ -1,0 +1,10 @@
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://rcouuwhkd0dn"]
+
+[ext_resource type="Script" uid="uid://cclp6ov8d68s" path="res://scripts/card_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+card_name = "Lumber Mill"
+body = "Harvest timber."
+card_types = Array[String](["building", "lumber_mill"])
+can_stack = Array[String](["planet"])

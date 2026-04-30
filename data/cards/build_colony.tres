@@ -5,7 +5,8 @@
 [resource]
 script = ExtResource("1")
 card_name = "Colony"
-body = "Build on a planet."
+body = "Build on a planet.
+
+Every 5 turns, draft a card."
 card_types = Array[String](["colony", "building"])
 can_stack = Array[String](["planet"])
-releases_on_threshold = false

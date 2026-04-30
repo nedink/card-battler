@@ -79,7 +79,7 @@ offset_right = 1060.0
 offset_bottom = 70.0
 theme_override_colors/font_color = Color(0.85, 0.85, 0.95, 1)
 theme_override_font_sizes/font_size = 13
-text = "Drag Colony onto a planet. Drag Discover up to play. Click any pile to view. SPACE: end turn. ESC: close."
+text = "Each turn reveals a card from the discovery deck. Drag Colony onto a planet. Click any pile to view. SPACE: end turn. ESC: close."
 
 [node name="PileViewer" parent="." unique_id=792158431 instance=ExtResource("9_pv")]
 layout_mode = 3

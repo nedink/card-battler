@@ -55,6 +55,8 @@ const TYPE_COLORS := {
 	"Oceanic": Color(0.20, 0.45, 0.85),
 	"Ice": Color(0.78, 0.92, 1.00),
 	"Gas Giant": Color(0.88, 0.66, 0.38),
+	"Journal": Color(0.32, 0.26, 0.18),
+	"Ship": Color(0.55, 0.20, 0.55),
 }
 const FALLBACK_TYPE_COLOR := Color(0.5, 0.5, 0.5)
 
@@ -117,8 +119,14 @@ func refresh_from_data() -> void:
 		return
 	if _name_label != null:
 		_name_label.text = data.planet_name
+	# Non-planet board cards (journal, alien ship) hide the type label and the
+	# sphere — they aren't world bodies, just visual stack anchors.
+	var is_special: bool = "journal" in data.card_types or "alien_ship" in data.card_types
 	if _type_label != null:
+		_type_label.visible = not is_special
 		_type_label.text = data.planet_type
+	if _sphere != null:
+		_sphere.visible = not is_special
 	var type_color := _combined_type_color(data.planet_type)
 	_apply_sphere_color(type_color)
 	_apply_body_color(type_color)
@@ -248,7 +256,8 @@ func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> voi
 		if draggable_in_bounds and _active_dragger == null:
 			_dragging = true
 			_active_dragger = self
-			_drag_offset = global_position - get_global_mouse_position()
+			var parent: Node2D = get_parent()
+			_drag_offset = position - parent.to_local(get_global_mouse_position())
 	else:
 		_end_drag()
 
@@ -257,11 +266,15 @@ func _process(_delta: float) -> void:
 		if not Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT):
 			_end_drag()
 			return
-		var target := get_global_mouse_position() + _drag_offset
-		global_position = target
+		# Drive drag in the parent's local frame so play-space zoom doesn't
+		# distort the offset and so position math stays in the same space as
+		# get_world_bounds()'s separation checks.
+		var parent: Node2D = get_parent()
+		var target: Vector2 = parent.to_local(get_global_mouse_position()) + _drag_offset
+		position = target
 		_resolve_against_siblings()
 		if data != null:
-			data.position = global_position
+			data.position = position
 
 func _end_drag() -> void:
 	_dragging = false
@@ -283,7 +296,7 @@ func _resolve_against_siblings() -> void:
 			var push: Vector2 = _aabb_separation_push(sib_bounds, my_bounds, SEPARATION_PADDING)
 			if push == Vector2.ZERO:
 				continue
-			global_position += push
+			position += push
 			any_overlap = true
 		if not any_overlap:
 			return
@@ -317,12 +330,14 @@ func get_local_bounds() -> Rect2:
 	return Rect2(-BODY_HALF.x, -BODY_HALF.y, SIZE.x, SIZE.y + stack_extra)
 
 func get_world_bounds() -> Rect2:
-	# Same rectangle as get_local_bounds, translated by global_position.
-	# Note: the play space's scale (zoom) isn't applied here because both
-	# this planet and any sibling we compare against share the same parent,
-	# so working in their common parent space is sufficient.
+	# Same rectangle as get_local_bounds, expressed in the parent (Planets
+	# container) frame. We use `position` rather than `global_position` so
+	# the rect's anchor and its size live in the same space — `global_position`
+	# would absorb the play-space zoom while get_local_bounds() does not, and
+	# the resulting mismatch would let zoomed planets pass through each other
+	# or repel from too far away.
 	var b := get_local_bounds()
-	b.position += global_position
+	b.position += position
 	return b
 
 func _update_click_area_shape() -> void:

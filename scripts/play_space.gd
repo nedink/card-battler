@@ -5,6 +5,7 @@ class_name PlaySpace extends Node2D
 
 const CARD_BACK_SCENE := preload("res://scenes/card_back.tscn")
 const PLANET_CARD_SCENE := preload("res://scenes/planet_card.tscn")
+const CARD_SCENE := preload("res://scenes/card.tscn")
 
 # Bounds within which planets settle. Wider than the manual-reposition bounds
 # in PlanetCard because the play space spans most of the screen.
@@ -53,6 +54,17 @@ var _hovered_planet: PlanetCard = null
 # modal that paused the hand) when deciding whether to start a pan.
 var hand: Node = null
 
+# Set true while a full-screen modal is up. Mouse motion is already swallowed
+# by the modal's backdrop so no new hovers can fire, but a planet that was
+# hovered when the modal opened would otherwise stay highlighted underneath.
+# Setting this clears the current hover and blocks subsequent updates.
+var input_paused: bool = false:
+	set(value):
+		input_paused = value
+		if value and _hovered_planet != null and is_instance_valid(_hovered_planet):
+			_hovered_planet.set_hovered(false)
+			_hovered_planet = null
+
 func set_planet_deck_position(world_pos: Vector2) -> void:
 	_planet_deck_position = world_pos
 
@@ -90,9 +102,9 @@ func _unhandled_input(event: InputEvent) -> void:
 func _update_hovered_planet(screen_pos: Vector2) -> void:
 	# Suppress the hover highlight while the hand is dragging a card — that
 	# flow uses the `targeted` (yellow) border so its planet under the cursor
-	# is unambiguous.
+	# is unambiguous. Also suppressed while a modal has paused us.
 	var hit = null
-	if hand == null or not hand.is_dragging():
+	if not input_paused and (hand == null or not hand.is_dragging()):
 		hit = get_planet_under_cursor(screen_pos)
 	if hit == _hovered_planet:
 		return
@@ -149,17 +161,33 @@ func get_planets() -> Array:
 			result.append(child)
 	return result
 
-func place_planet_immediate(planet_data, world_pos: Vector2) -> PlanetCard:
-	# Used for the homeworld at game start — no arc, just appear.
-	var pc := _spawn_planet(planet_data, world_pos)
+func place_planet_immediate(planet_data, local_pos: Vector2) -> PlanetCard:
+	# Used for the homeworld and the journal card at game start — no arc, just
+	# appear. local_pos is in this PlaySpace's local frame.
+	var pc := _spawn_planet(planet_data, local_pos)
 	pc.scale = Vector2.ONE
 	return pc
 
-func emit_next_planet(planet_data) -> void:
-	# Animate a card-back from the planet-deck position arcing into a
-	# non-overlapping spot in the play space, then swap in a real PlanetCard.
-	var target := _find_non_overlapping_position()
-	planet_data.position = target
+func find_card_by_tag(tag: String) -> PlanetCard:
+	# Locate a board card whose data carries `tag` (e.g. "journal", "alien_ship").
+	# Returns the first match or null. Stable: there's at most one journal card,
+	# and discovering the second alien ship just picks up whichever is topmost.
+	for child in _planets_container.get_children():
+		if child is PlanetCard and child.data != null and tag in child.data.card_types:
+			return child
+	return null
+
+func has_card_with_tag(tag: String) -> bool:
+	return find_card_by_tag(tag) != null
+
+func emit_journal_entry(entry: CardData) -> void:
+	# Animate a card-back from the planet-deck position to the journal card's
+	# location, then swap in a real Card and stack it onto the journal. If the
+	# journal card is missing (shouldn't happen mid-run) the entry is dropped.
+	var journal := find_card_by_tag("journal")
+	if journal == null:
+		return
+	var target_global: Vector2 = journal.global_position
 
 	var back: Node2D = CARD_BACK_SCENE.instantiate()
 	add_child(back)
@@ -167,13 +195,50 @@ func emit_next_planet(planet_data) -> void:
 	back.z_index = 50
 
 	var start := back.global_position
-	var midpoint := (start + target) * 0.5
+	var midpoint := (start + target_global) * 0.5
 	var control := midpoint + Vector2(0.0, -EMIT_ARC_PEAK)
 
 	var tween := create_tween()
 	tween.set_ease(Tween.EASE_IN_OUT)
 	tween.set_trans(Tween.TRANS_CUBIC)
-	tween.tween_method(_arc_back.bind(back, start, control, target), 0.0, 1.0, EMIT_DURATION)
+	tween.tween_method(_arc_back.bind(back, start, control, target_global), 0.0, 1.0, EMIT_DURATION)
+	tween.parallel().tween_property(back, "rotation", -PI, EMIT_DURATION)
+	tween.parallel().tween_property(back, "scale", Vector2(1.4, 1.4), EMIT_DURATION)
+	tween.finished.connect(_on_journal_arc_done.bind(back, entry, journal))
+
+func _on_journal_arc_done(back: Node2D, entry: CardData, journal: PlanetCard) -> void:
+	back.queue_free()
+	if not is_instance_valid(journal):
+		return
+	var card: Card = CARD_SCENE.instantiate()
+	add_child(card)
+	card.global_position = journal.global_position
+	card.configure(entry)
+	journal.attach_building_card(card)
+
+func emit_next_planet(planet_data) -> void:
+	# Animate a card-back from the planet-deck position arcing into a
+	# non-overlapping spot in the play space, then swap in a real PlanetCard.
+	# `target` is in PlaySpace-local space; the arc itself drives global
+	# position so it can fly from the planet deck (a sibling under main, in
+	# global coords) — convert once when seeding the tween.
+	var target := _find_non_overlapping_position()
+	planet_data.position = target
+	var target_global := to_global(target)
+
+	var back: Node2D = CARD_BACK_SCENE.instantiate()
+	add_child(back)
+	back.global_position = _planet_deck_position
+	back.z_index = 50
+
+	var start := back.global_position
+	var midpoint := (start + target_global) * 0.5
+	var control := midpoint + Vector2(0.0, -EMIT_ARC_PEAK)
+
+	var tween := create_tween()
+	tween.set_ease(Tween.EASE_IN_OUT)
+	tween.set_trans(Tween.TRANS_CUBIC)
+	tween.tween_method(_arc_back.bind(back, start, control, target_global), 0.0, 1.0, EMIT_DURATION)
 	tween.parallel().tween_property(back, "rotation", -PI, EMIT_DURATION)
 	tween.parallel().tween_property(back, "scale", Vector2(1.4, 1.4), EMIT_DURATION)
 	tween.finished.connect(_on_emit_arc_done.bind(back, planet_data, target))
@@ -188,12 +253,16 @@ func _on_emit_arc_done(back: Node2D, planet_data, target: Vector2) -> void:
 	pc.play_settle_in()
 	GameState.planet_settled.emit(planet_data)
 
-func _spawn_planet(planet_data, world_pos: Vector2) -> PlanetCard:
+func _spawn_planet(planet_data, local_pos: Vector2) -> PlanetCard:
+	# `local_pos` is in this PlaySpace's local frame (the same frame
+	# _find_non_overlapping_position generates candidates in). Setting `position`
+	# rather than `global_position` keeps the spawn in the right spot when the
+	# play space is zoomed or panned.
 	var pc: PlanetCard = PLANET_CARD_SCENE.instantiate()
 	_planets_container.add_child(pc)
-	pc.global_position = world_pos
+	pc.position = local_pos
 	pc.bind_data(planet_data)
-	planet_data.position = world_pos
+	planet_data.position = local_pos
 	return pc
 
 func _find_non_overlapping_position() -> Vector2:
@@ -241,4 +310,3 @@ static func _candidate_clear(candidate: Rect2, existing_bounds: Array, pad: floa
 		if inflated.intersects(other):
 			return false
 	return true
-
