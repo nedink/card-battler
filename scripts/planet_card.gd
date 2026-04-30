@@ -7,11 +7,10 @@ class_name PlanetCard extends Node2D
 # down and rendered in front of the older ones, so the planet body and the
 # cards above each one cover all but its bottom peek.
 #
-# Pickable + physical boundary: the planet body and its building stack are
-# treated as a single rectangular region (see get_local_bounds). Clicks on
-# the stack pick up the planet for dragging, drag-played cards target the
-# planet when dropped anywhere over that rectangle, and inter-planet
-# separation pushes neighbours so the rectangles never overlap.
+# Pickable region: the planet body and its building stack are treated as a
+# single rectangular region (see get_local_bounds). Clicks on the stack pick
+# up the planet for dragging; drag-played cards target the planet when dropped
+# anywhere over that rectangle.
 
 signal planet_clicked(planet)
 
@@ -72,14 +71,13 @@ var _building_visuals: Array = []
 
 # Padding (px) around each planet's pickable rectangle when checking for
 # overlap with neighbours. Two planets' rectangles must keep this much
-# clearance on every side, so dragging respects the same gap the random
-# emitter respects.
-const SEPARATION_PADDING := 14.0
-
 # Only one planet can be dragged at a time. Tracked at class level so a
 # second planet's Area2D click (e.g. from overlapping click areas, or a fast
 # user clicking another planet mid-drag) is ignored.
 static var _active_dragger: PlanetCard = null
+
+var play_space: PlaySpace = null
+var grid_cell: Vector2i = Vector2i.ZERO
 
 var _dragging: bool = false
 var _drag_offset: Vector2 = Vector2.ZERO
@@ -258,6 +256,8 @@ func _on_input_event(_viewport: Node, event: InputEvent, _shape_idx: int) -> voi
 			_active_dragger = self
 			var parent: Node2D = get_parent()
 			_drag_offset = position - parent.to_local(get_global_mouse_position())
+			if play_space != null:
+				play_space.release_cell(self)
 	else:
 		_end_drag()
 
@@ -267,12 +267,10 @@ func _process(_delta: float) -> void:
 			_end_drag()
 			return
 		# Drive drag in the parent's local frame so play-space zoom doesn't
-		# distort the offset and so position math stays in the same space as
-		# get_world_bounds()'s separation checks.
+		# distort the offset.
 		var parent: Node2D = get_parent()
 		var target: Vector2 = parent.to_local(get_global_mouse_position()) + _drag_offset
 		position = target
-		_resolve_against_siblings()
 		if data != null:
 			data.position = position
 
@@ -280,46 +278,8 @@ func _end_drag() -> void:
 	_dragging = false
 	if _active_dragger == self:
 		_active_dragger = null
-
-func _resolve_against_siblings() -> void:
-	# Constrain this planet's position so its pickable rectangle doesn't
-	# overlap any sibling's. Siblings are immovable — the dragger slides
-	# along their edges instead of pushing them. Iterates a few times so
-	# resolving against one neighbour can't leave us overlapping another.
-	for _i in 4:
-		var any_overlap := false
-		var my_bounds := get_world_bounds()
-		for sib in get_parent().get_children():
-			if sib == self or not (sib is PlanetCard):
-				continue
-			var sib_bounds: Rect2 = sib.get_world_bounds()
-			var push: Vector2 = _aabb_separation_push(sib_bounds, my_bounds, SEPARATION_PADDING)
-			if push == Vector2.ZERO:
-				continue
-			position += push
-			any_overlap = true
-		if not any_overlap:
-			return
-
-static func _aabb_separation_push(a: Rect2, b: Rect2, padding: float) -> Vector2:
-	# Vector to apply to b so that b no longer overlaps a (with `padding` of
-	# clearance on every side). Returns Vector2.ZERO if already separated.
-	# Resolves along whichever axis has the smaller required push.
-	var a_inflated: Rect2 = a.grow(padding * 0.5)
-	var b_inflated: Rect2 = b.grow(padding * 0.5)
-	if not a_inflated.intersects(b_inflated):
-		return Vector2.ZERO
-	var a_center: Vector2 = a_inflated.position + a_inflated.size * 0.5
-	var b_center: Vector2 = b_inflated.position + b_inflated.size * 0.5
-	var dx := b_center.x - a_center.x
-	var dy := b_center.y - a_center.y
-	var overlap_x: float = (a_inflated.size.x + b_inflated.size.x) * 0.5 - absf(dx)
-	var overlap_y: float = (a_inflated.size.y + b_inflated.size.y) * 0.5 - absf(dy)
-	if overlap_x < overlap_y:
-		var dir_x: float = signf(dx) if dx != 0.0 else 1.0
-		return Vector2(dir_x * overlap_x, 0.0)
-	var dir_y: float = signf(dy) if dy != 0.0 else 1.0
-	return Vector2(0.0, dir_y * overlap_y)
+	if play_space != null:
+		play_space.snap_planet_to_grid(self)
 
 func get_local_bounds() -> Rect2:
 	# Rectangle (in this PlanetCard's local coords) covering the planet body
