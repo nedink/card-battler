@@ -1,9 +1,17 @@
 [gd_scene format=3 uid="uid://coet3ivux0gs8"]
 
 [ext_resource type="Script" uid="uid://bxa4abx3qmbr1" path="res://scripts/card.gd" id="1_card"]
-[ext_resource type="Texture2D" uid="uid://fx52p2jj2p2k" path="res://icon.svg" id="2_6u4wf"]
+[ext_resource type="Shader" path="res://shaders/planet_sphere.gdshader" id="2_sphere"]
 
-[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_body"]
+[sub_resource type="ShaderMaterial" id="SM_sphere"]
+shader = ExtResource("2_sphere")
+shader_parameter/base_color = Color(0.55, 0.42, 0.30, 1)
+shader_parameter/light_dir = Vector3(-0.45, -0.55, 0.7)
+shader_parameter/ambient = 0.18
+shader_parameter/rim_strength = 0.55
+shader_parameter/specular_strength = 0.45
+
+[sub_resource type="StyleBoxFlat" id="SB_body"]
 bg_color = Color(0.95, 0.92, 0.82, 1)
 corner_radius_top_left = 8
 corner_radius_top_right = 8
@@ -13,38 +21,55 @@ shadow_color = Color(0.07, 0.08, 0.12, 0.45)
 shadow_size = 8
 shadow_offset = Vector2(0, 3)
 
-[sub_resource type="LabelSettings" id="LabelSettings_6u4wf"]
+[sub_resource type="LabelSettings" id="LS_body"]
 line_spacing = -5.0
 font_size = 13
 font_color = Color(0, 0, 0, 1)
 
-[node name="Card" type="Node2D" unique_id=1984242006]
+[node name="Card" type="Node2D"]
 script = ExtResource("1_card")
 
-[node name="Body" type="Panel" parent="." unique_id=230992740]
+[node name="Body" type="Panel" parent="."]
 offset_left = -60.0
 offset_top = -84.0
 offset_right = 60.0
 offset_bottom = 84.0
 mouse_filter = 2
-theme_override_styles/panel = SubResource("StyleBoxFlat_body")
+theme_override_styles/panel = SubResource("SB_body")
 
-[node name="Sprite2D" type="Sprite2D" parent="Body" unique_id=2052605753]
-position = Vector2(60, 58)
-scale = Vector2(0.765625, 0.51562494)
-texture = ExtResource("2_6u4wf")
-
-[node name="NameLabel" type="Label" parent="Body" unique_id=236591173]
+[node name="NameLabel" type="Label" parent="Body"]
 layout_mode = 0
-offset_left = 10.0
-offset_top = 1.0
-offset_right = 110.0
-offset_bottom = 27.0
+offset_left = 6.0
+offset_top = 6.0
+offset_right = 114.0
+offset_bottom = 32.0
 theme_override_colors/font_color = Color(0.1, 0.08, 0.05, 1)
 theme_override_font_sizes/font_size = 18
-text = "Strike"
+text = "Card"
+horizontal_alignment = 1
 
-[node name="NameLabel2" type="Label" parent="Body" unique_id=294952074]
+[node name="TypeLabel" type="Label" parent="Body"]
+visible = false
+layout_mode = 0
+offset_left = 6.0
+offset_top = 38.0
+offset_right = 114.0
+offset_bottom = 58.0
+theme_override_colors/font_color = Color(0.75, 0.8, 0.9, 1)
+theme_override_font_sizes/font_size = 11
+text = ""
+horizontal_alignment = 1
+
+[node name="Sphere" type="ColorRect" parent="Body"]
+visible = false
+offset_left = 15.0
+offset_top = 64.0
+offset_right = 105.0
+offset_bottom = 154.0
+mouse_filter = 2
+material = SubResource("SM_sphere")
+
+[node name="BodyLabel" type="Label" parent="Body"]
 layout_mode = 0
 offset_left = 10.0
 offset_top = 94.0
@@ -53,6 +78,7 @@ offset_bottom = 151.0
 theme_override_colors/font_color = Color(0.1, 0.08, 0.05, 1)
 theme_override_constants/line_spacing = 0
 theme_override_font_sizes/font_size = 18
-text = "Deal 6 damage"
-label_settings = SubResource("LabelSettings_6u4wf")
+text = ""
+label_settings = SubResource("LS_body")
+horizontal_alignment = 1
 autowrap_mode = 3

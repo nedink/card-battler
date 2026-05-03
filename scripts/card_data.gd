@@ -21,3 +21,7 @@ class_name CardData extends Resource
 # When true, the card plays by being released above the hand's threshold line
 # instead of by being dragged onto a stack. Takes precedence over can_stack.
 @export var releases_on_threshold: bool = false
+
+# Only meaningful for cards with the "planet" tag — drives the sphere/body
+# tint and the type label. Empty for non-planet cards.
+@export var planet_type: String = ""

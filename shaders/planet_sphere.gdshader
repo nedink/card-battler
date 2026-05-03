@@ -2,7 +2,7 @@ shader_type canvas_item;
 
 // Fakes a lit 3D sphere on a square quad. The quad's UVs are interpreted as
 // a unit disc; pixels outside the disc are discarded so corners don't show.
-// The base color is set per-instance from planet_card.gd based on the
+// The base color is set per-instance from card.gd based on the
 // planet's type (or the average of its types when more than one applies).
 
 uniform vec4 base_color : source_color = vec4(0.5, 0.5, 0.5, 1.0);

@@ -1,3 +1,3 @@
 class_name PlanetLibrary extends Resource
 
-@export var planets: Array[PlanetDef] = []
+@export var planets: Array[CardData] = []

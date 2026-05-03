@@ -23,15 +23,9 @@ signal card_played(card: Card, target_planet)
 
 @onready var path: Path2D = $Path2D
 
-# Stacking ranks. Cards in hand take HAND_Z_BASE .. HAND_Z_BASE+n-1
-# (left-to-right). Hover and drag boost a card above the fan; flying retains
-# the drag boost so the card stays on top of everything until queue_free.
-# HAND_Z_BASE is set above 0 so freshly-drawn cards always render above any
-# end-turn-discarded cards still arcing toward the discard pile (those reset
-# to z=0 in Card.discard_fly).
-const HAND_Z_BASE := 10
-const HOVER_Z := 100
-const DRAG_Z := 1000
+# Cards in hand take ZLayers.HAND_FAN_BASE .. + n-1 (left-to-right). Hover
+# and drag elevate above the fan; the band layout in z_layers.gd documents
+# how these stack against the board.
 
 var cards: Array[Card] = []
 var _hovered_card: Card = null
@@ -55,9 +49,10 @@ var input_paused: bool = false
 func _process(_delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
-	if input_paused:
-		# Modal up — drop hover so the lifted card doesn't sit elevated under
-		# the overlay, and don't bother updating hover/drag this frame.
+	if input_paused or _play_space_busy():
+		# Either a modal is up or the play space is dragging a stack. Drop the
+		# hover so a previously-lifted card doesn't sit elevated under the
+		# overlay/drag, and skip per-frame interaction this frame.
 		if _hovered_card != null:
 			clear_hover()
 		return
@@ -104,6 +99,8 @@ func _set_targeted_planet(planet) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if Engine.is_editor_hint():
 		return
+	if input_paused or _play_space_busy():
+		return
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if event.pressed:
 			if _dragging_card == null and _hovered_card != null:
@@ -113,6 +110,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _dragging_card != null:
 				_end_drag()
 				get_viewport().set_input_as_handled()
+
+func _play_space_busy() -> bool:
+	return play_space != null and play_space.has_method("is_dragging") and play_space.is_dragging()
 
 func _draw() -> void:
 	# Visualize the play threshold in the editor so you can see where
@@ -145,13 +145,13 @@ func has_hovered_card() -> bool:
 func clear_hover() -> void:
 	# Force-unhover whatever's currently hovered. Used at end-of-turn before
 	# the hand is wiped, so the hovered card doesn't fly off to the discard
-	# pile with its elevated HOVER_Z still applied (which would put it above
-	# the freshly-drawn cards).
+	# pile with its hover lift still applied (which would put it above the
+	# freshly-drawn cards).
 	if _hovered_card == null:
 		return
 	_hovered_card.set_hovered(false)
 	var idx := cards.find(_hovered_card)
-	_hovered_card.z_index = HAND_Z_BASE + idx if idx >= 0 else 0
+	_hovered_card.z_index = ZLayers.HAND_FAN_BASE + idx if idx >= 0 else 0
 	_hovered_card = null
 
 func _start_drag(card: Card) -> void:
@@ -159,7 +159,7 @@ func _start_drag(card: Card) -> void:
 	_hovered_card = null
 	card.set_hovered(false)
 	card.start_drag()
-	card.z_index = DRAG_Z
+	card.z_index = ZLayers.DRAG
 	# Re-layout the remaining cards so the gap closes immediately.
 	layout()
 
@@ -225,7 +225,7 @@ func layout() -> void:
 		# Fan position drives z-order: rightmost card renders above its left neighbor.
 		# Don't clobber the hovered card's elevated z here.
 		if c != _hovered_card:
-			c.z_index = HAND_Z_BASE + i
+			c.z_index = ZLayers.HAND_FAN_BASE + i
 		i += 1
 
 func _update_hover() -> void:
@@ -254,11 +254,11 @@ func _update_hover() -> void:
 		# If it's no longer in the hand (e.g. removed during end-turn), drop
 		# it to z=0 so it doesn't render above newly-drawn cards.
 		var idx := cards.find(_hovered_card)
-		_hovered_card.z_index = HAND_Z_BASE + idx if idx >= 0 else 0
+		_hovered_card.z_index = ZLayers.HAND_FAN_BASE + idx if idx >= 0 else 0
 	_hovered_card = found
 	if found != null:
 		found.set_hovered(true)
-		found.z_index = HOVER_Z
+		found.z_index = ZLayers.HOVER
 
 func _point_in_card(card: Card, world_point: Vector2) -> bool:
 	# Hit-test against the rest pose, expanded upward to cover the hover lift.
