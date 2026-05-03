@@ -159,7 +159,7 @@ func _start_drag(card: Card) -> void:
 	_hovered_card = null
 	card.set_hovered(false)
 	card.start_drag()
-	card.z_index = ZLayers.DRAG
+	card.z_index = ZLayers.HAND_DRAG
 	# Re-layout the remaining cards so the gap closes immediately.
 	layout()
 
@@ -258,7 +258,7 @@ func _update_hover() -> void:
 	_hovered_card = found
 	if found != null:
 		found.set_hovered(true)
-		found.z_index = ZLayers.HOVER
+		found.z_index = ZLayers.HAND_HOVER
 
 func _point_in_card(card: Card, world_point: Vector2) -> bool:
 	# Hit-test against the rest pose, expanded upward to cover the hover lift.

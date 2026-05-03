@@ -1,8 +1,11 @@
-class_name PileViewer extends Control
+class_name PileViewer extends CanvasLayer
 
 # Full-screen overlay that shows every card in a pile (deck/discard/exile) as
 # a grid of mini Card instances. Clicking the dim backdrop or pressing Esc
 # dismisses it.
+#
+# Lives on its own CanvasLayer so it sits above the world without fighting
+# z_index against board cards. Mirrors DraftModal's structure.
 #
 # Calls into card.gd's `configure()` so the rendered mini cards reuse the
 # exact same visuals (cost icons, name, body text, color) as live cards.
@@ -70,7 +73,7 @@ func show_pile(title: String, entries: Array) -> void:
 			# gui_input handler (and through it to the backdrop) so the user can
 			# dismiss the viewer by clicking anywhere — over a card, the panel
 			# background, or the dim backdrop.
-			_disable_input(card)
+			Card.disable_input_subtree(card)
 			card.scale = Vector2(CARD_SCALE, CARD_SCALE)
 			var col: int = i % CARDS_PER_ROW
 			var row: int = i / CARDS_PER_ROW
@@ -95,9 +98,3 @@ func hide_viewer() -> void:
 func _on_backdrop_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.pressed:
 		hide_viewer()
-
-func _disable_input(node: Node) -> void:
-	if node is Control:
-		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for c in node.get_children():
-		_disable_input(c)

@@ -70,7 +70,7 @@ func present(pack: Array, arc_target_world: Vector2 = Draft.NO_ARC_TARGET) -> vo
 		card.scale = Vector2(CARD_SCALE, CARD_SCALE)
 		card.set_rest(card_pos, 0.0)
 		# Clicks are caught by the slot — let them pass through the card visuals.
-		_disable_input(card)
+		Card.disable_input_subtree(card)
 		_cards.append(card)
 
 	_hovered_index = -1
@@ -153,9 +153,3 @@ func _clear() -> void:
 	_cards.clear()
 	_slot_controls.clear()
 	_hovered_index = -1
-
-func _disable_input(node: Node) -> void:
-	if node is Control:
-		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for c in node.get_children():
-		_disable_input(c)

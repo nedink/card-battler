@@ -125,7 +125,7 @@ func find_root_with_tag(tag: String) -> Card:
 		while n != null:
 			if tag in n.card_types:
 				return r
-			n = _next_chain_child(n)
+			n = Card.next_chain_child(n)
 	return null
 
 func has_card_with_tag(tag: String) -> bool:
@@ -146,7 +146,7 @@ func _collect_chain(root: Card, out: Array[Card]) -> void:
 	var n: Card = root
 	while n != null:
 		out.append(n)
-		n = _next_chain_child(n)
+		n = Card.next_chain_child(n)
 
 # Drop a hand-owned `card` onto `target`. Hand calls this (via main.gd) when
 # the player releases a draggable hand card over a stack with a matching top.
@@ -423,7 +423,7 @@ func _find_card_under(world_point: Vector2, exclude_root: Card) -> Card:
 				if depth > best_depth:
 					best_depth = depth
 					best = n
-			n = _next_chain_child(n)
+			n = Card.next_chain_child(n)
 			depth += 1
 	return best
 
@@ -433,12 +433,6 @@ func _roots() -> Array[Card]:
 		if child is Card:
 			arr.append(child)
 	return arr
-
-static func _next_chain_child(c: Card) -> Card:
-	for child in c.get_children():
-		if child is Card:
-			return child
-	return null
 
 # ---------------------------------------------------------------------------
 # Pan / zoom

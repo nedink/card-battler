@@ -71,15 +71,15 @@ const JOURNAL_POSITION := Vector2(140, 150)
 enum Phase { DRAW, PLAY, END_TURN }
 
 @onready var deck: Deck = $PlayerDeck
-@onready var hand: Hand = $Hand
+@onready var hand: Hand = $HandLayer/Hand
 @onready var discard: DiscardPile = $DiscardPile
 @onready var exile_pile: ExilePile = $ExilePile
 @onready var planet_deck: Deck = $PlanetDeck
 @onready var play_space: PlaySpace = $PlaySpace
 @onready var hud: Hud = $Hud
 @onready var end_turn_button: Button = $EndTurnButton
-# Cast required because the instanced scene's static root type is `Control`
-# (the script class_name doesn't propagate through `$NodePath` lookup).
+# Cast required because the script class_name doesn't propagate through
+# `$NodePath` lookup (the static root type is `CanvasLayer`).
 @onready var pile_viewer: PileViewer = $PileViewer as PileViewer
 
 var _showcasing: Array[Card] = []

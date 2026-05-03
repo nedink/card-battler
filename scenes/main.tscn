@@ -65,11 +65,14 @@ position = Vector2(1080, 620)
 [node name="ExilePile" parent="." unique_id=12849112 instance=ExtResource("8_exile")]
 position = Vector2(1210, 620)
 
-[node name="Hand" type="Node2D" parent="." unique_id=223713731]
+[node name="HandLayer" type="CanvasLayer" parent="."]
+layer = 5
+
+[node name="Hand" type="Node2D" parent="HandLayer" unique_id=223713731]
 position = Vector2(640, 640)
 script = ExtResource("2_hand")
 
-[node name="Path2D" type="Path2D" parent="Hand" unique_id=1371580635]
+[node name="Path2D" type="Path2D" parent="HandLayer/Hand" unique_id=1371580635]
 curve = SubResource("Curve2D_hand")
 
 [node name="Instructions" type="Label" parent="." unique_id=1028696784]
@@ -82,7 +85,3 @@ theme_override_font_sizes/font_size = 13
 text = "Each turn reveals a card from the discovery deck. Drag Colony onto a planet. Click any pile to view. SPACE: end turn. ESC: close."
 
 [node name="PileViewer" parent="." unique_id=792158431 instance=ExtResource("9_pv")]
-layout_mode = 3
-anchors_preset = 15
-grow_horizontal = 2
-grow_vertical = 2

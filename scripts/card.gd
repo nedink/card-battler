@@ -301,19 +301,28 @@ func get_chain_root() -> Card:
 func get_stack_top() -> Card:
 	# The chain leaf — deepest descendant down the chain. New cards attach here.
 	var n: Card = self
-	var c := _next_chain_child(n)
+	var c := Card.next_chain_child(n)
 	while c != null:
 		n = c
-		c = _next_chain_child(n)
+		c = Card.next_chain_child(n)
 	return n
 
-func _next_chain_child(c: Card) -> Card:
+static func next_chain_child(c: Card) -> Card:
 	# A card can have non-Card children (Body etc.) — walk children for the
 	# first Card child, which is the next link in the stack chain.
 	for child in c.get_children():
 		if child is Card:
 			return child
 	return null
+
+static func disable_input_subtree(node: Node) -> void:
+	# Make a card display-only by passing all mouse events through every
+	# Control in its subtree. Used by the pile viewer and draft modal so a
+	# transparent slot behind each card receives the click.
+	if node is Control:
+		(node as Control).mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for child in node.get_children():
+		disable_input_subtree(child)
 
 func get_stack_top_card_types() -> Array:
 	return get_stack_top().card_types
@@ -389,12 +398,12 @@ func _propagate_step(value: float) -> void:
 	# via the attach tween — skip the write for them so the two animations
 	# don't fight.
 	_step = value
-	var c := _next_chain_child(self)
+	var c := Card.next_chain_child(self)
 	while c != null:
 		c._step = value
 		if not c._attaching:
 			c.position = Vector2(0.0, value)
-		c = _next_chain_child(c)
+		c = Card.next_chain_child(c)
 
 # ---------------------------------------------------------------------------
 # Hit testing
