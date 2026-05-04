@@ -2,12 +2,16 @@
 
 [ext_resource type="Script" uid="uid://dyk7d6u6lwjqh" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" uid="uid://cc7q8rusdgml7" path="res://scripts/hand.gd" id="2_hand"]
-[ext_resource type="PackedScene" path="res://scenes/deck.tscn" id="3_deck_scene"]
+[ext_resource type="PackedScene" uid="uid://djrxviik5rjsm" path="res://scenes/deck.tscn" id="3_deck_scene"]
 [ext_resource type="PackedScene" uid="uid://ckvv8rygrqism" path="res://scenes/discard_pile.tscn" id="4_discard_scene"]
 [ext_resource type="PackedScene" uid="uid://b0nhxt2ypx441" path="res://scenes/play_space.tscn" id="5_play_space"]
 [ext_resource type="PackedScene" uid="uid://b8hud001" path="res://scenes/hud.tscn" id="6_hud"]
 [ext_resource type="PackedScene" uid="uid://exilepile001" path="res://scenes/exile_pile.tscn" id="8_exile"]
+[ext_resource type="AudioStream" uid="uid://bk12wkjkycl0" path="res://data/sounds/shuffle/1.wav" id="9_eb6dy"]
 [ext_resource type="PackedScene" uid="uid://dwdr4cm5o6eqq" path="res://scenes/pile_viewer.tscn" id="9_pv"]
+[ext_resource type="AudioStream" uid="uid://c24t86yxax8c4" path="res://data/sounds/slap/1.wav" id="10_trceg"]
+[ext_resource type="AudioStream" uid="uid://cbfq5mguko7qj" path="res://data/sounds/slap/2.wav" id="11_a8y0u"]
+[ext_resource type="AudioStream" uid="uid://c7krnkujqyp4m" path="res://data/sounds/slap/3.wav" id="12_jkv2x"]
 
 [sub_resource type="StyleBoxFlat" id="SB_endbtn"]
 bg_color = Color(0.2, 0.45, 0.65, 1)
@@ -29,6 +33,16 @@ _data = {
 "points": PackedVector2Array(-39.33333, 6.666666, 0, 0, -350, 0, -245, 0, 245, 0, 0, -60, 0, 0, 147, 24, 350, 0)
 }
 point_count = 3
+
+[sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_jbj1t"]
+streams_count = 1
+stream_0/stream = ExtResource("9_eb6dy")
+
+[sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_muem4"]
+streams_count = 3
+stream_0/stream = ExtResource("10_trceg")
+stream_1/stream = ExtResource("11_a8y0u")
+stream_2/stream = ExtResource("12_jkv2x")
 
 [node name="Main" type="Node2D" unique_id=1172728585]
 script = ExtResource("1_main")
@@ -65,7 +79,7 @@ position = Vector2(1080, 620)
 [node name="ExilePile" parent="." unique_id=12849112 instance=ExtResource("8_exile")]
 position = Vector2(1210, 620)
 
-[node name="HandLayer" type="CanvasLayer" parent="."]
+[node name="HandLayer" type="CanvasLayer" parent="." unique_id=137137678]
 layer = 5
 
 [node name="Hand" type="Node2D" parent="HandLayer" unique_id=223713731]
@@ -85,3 +99,9 @@ theme_override_font_sizes/font_size = 13
 text = "Each turn reveals a card from the discovery deck. Drag Colony onto a planet. Click any pile to view. SPACE: end turn. ESC: close."
 
 [node name="PileViewer" parent="." unique_id=792158431 instance=ExtResource("9_pv")]
+
+[node name="CardShuffleAudioStreamPlayer2D" type="AudioStreamPlayer2D" parent="." unique_id=454393448]
+stream = SubResource("AudioStreamRandomizer_jbj1t")
+
+[node name="CardSlapAudioStreamPlayer2D" type="AudioStreamPlayer2D" parent="." unique_id=236552670]
+stream = SubResource("AudioStreamRandomizer_muem4")

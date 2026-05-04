@@ -46,7 +46,7 @@ const SETTLE_IN_FROM := Vector2(0.3, 0.3)
 const SETTLE_IN_DURATION := 0.3
 
 # Attach-to-stack animation when dropped on a target.
-const ATTACH_DURATION := 0.45
+const ATTACH_DURATION := 0.1
 
 # Color schemes. Play cards are parchment; world cards (planets/journal/ship)
 # are tinted dark.

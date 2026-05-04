@@ -78,6 +78,8 @@ enum Phase { DRAW, PLAY, END_TURN }
 @onready var play_space: PlaySpace = $PlaySpace
 @onready var hud: Hud = $Hud
 @onready var end_turn_button: Button = $EndTurnButton
+@onready var card_shuffle_audio: AudioStreamPlayer2D = $CardShuffleAudioStreamPlayer2D
+@onready var card_slap_audio: AudioStreamPlayer2D = $CardSlapAudioStreamPlayer2D
 # Cast required because the script class_name doesn't propagate through
 # `$NodePath` lookup (the static root type is `CanvasLayer`).
 @onready var pile_viewer: PileViewer = $PileViewer as PileViewer
@@ -262,6 +264,7 @@ func _draw_one_card() -> void:
 		GameState.player_discard.clear()
 		deck.cards_remaining = recycled
 		discard.cards_remaining = 0
+		card_shuffle_audio.play()
 		_animate_reshuffle(recycled)
 	if GameState.player_deck.is_empty():
 		return
@@ -311,6 +314,7 @@ func _on_card_played(card: Card, target_card) -> void:
 	if target_card != null:
 		GameState.total_buildings_placed += 1
 		play_space.attach_card_to_stack(card, target_card)
+		card_slap_audio.play()
 		return
 	_send_card_to_discard(card)
 
