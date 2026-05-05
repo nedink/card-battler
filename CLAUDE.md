@@ -42,7 +42,7 @@ Every card in the game — hand cards, planets, alien ships, journal anchors, jo
 
 A stack is a chain of `Card` nodes along the scene tree: the chain root is a direct child of `PlaySpace/Stacks` and each successive card is a child of the previous one. Each child sits at local position `(0, _step)` so its body peeks out below its parent by `_step` pixels. Children inherit Node2D transforms, so dragging a stack root naturally moves the whole subtree — no manual "drag this list of children too" bookkeeping.
 
-When a card is hovered, the chain root expands the peek across all descendants (`_propagate_step`) so the player can read each card.
+When a card in a stack is hovered, only that card's slot expands. The chain root tracks `_hover_card_in_chain`; the child of the hovered card gets `STEP_EXPANDED`, every other parent→child gap stays `STEP_COLLAPSED`. Cards below the expanded slot are pushed down rigidly via inherited transforms — they don't themselves expand. PlaySpace drives this by calling `set_chain_hover_target` on the chain root whenever the deepest card under the cursor changes.
 
 ### Tag-based stacking
 

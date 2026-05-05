@@ -35,8 +35,10 @@ const SPIN_REVOLUTIONS := 2.0
 
 # Stack peek geometry. Each stacked card sits at (0, _step) in its parent's
 # frame, so as the chain descends each card's body covers all but a _step-tall
-# strip of the card above it. Hover (on the chain root) expands _step to let
-# the player read each card.
+# strip of the card above it. Hover expands _step *only on the child of the
+# hovered card* so that one card reveals more of itself; everyone else holds
+# STEP_COLLAPSED. The cards below the expanded slot are pushed down by the
+# extra peek as a side-effect of inherited transforms.
 const STEP_COLLAPSED := 8.0
 const STEP_EXPANDED := 28.0
 const STEP_TWEEN_DURATION := 0.18
@@ -129,14 +131,25 @@ var _arc_end: Vector2 = Vector2.ZERO
 var _body_stylebox: StyleBoxFlat = null
 var _body_label_settings: LabelSettings = null
 
-# Stack peek. Stored on every card; the chain root drives the value (via
-# _propagate_step) so the whole chain shares one collapsed/expanded state.
+# Stack peek. Stored on every card — represents this card's offset from its
+# parent in the chain. Per-card so a single child can be expanded while its
+# siblings stay collapsed (only meaningful for non-root cards; the root has
+# no chain parent and its _step is unused).
 var _step: float = STEP_COLLAPSED
 var _step_tween: Tween = null
 
-# True while attach_below is animating this card into its slot. _propagate_step
-# skips the position write for attaching cards so the chain's hover-expansion
-# tween doesn't fight the attach tween.
+# Only meaningful on the chain root. Points at whichever card in this chain
+# is currently being hovered, or null when nothing is. The child of this
+# card gets STEP_EXPANDED; everyone else gets STEP_COLLAPSED.
+var _hover_card_in_chain: Card = null
+
+# Snapshot of (card, start_step, target_step) tuples driven by the per-card
+# hover-step tween (_animate_chain_layout). Held on the chain root.
+var _pending_chain_entries: Array = []
+
+# True while attach_below is animating this card into its slot. The chain
+# layout writers skip the position write for attaching cards so the hover-
+# expansion tween doesn't fight the attach tween.
 var _attaching: bool = false
 var _attach_start_pos: Vector2 = Vector2.ZERO
 
@@ -236,12 +249,13 @@ func _apply_world_body_color(type_color: Color) -> void:
 # Visual state setters
 
 func set_hovered(value: bool) -> void:
+	# Pure visual border/bg refresh. Chain-step expansion is driven separately
+	# by PlaySpace via set_chain_hover_target on the chain root, since the
+	# hovered card may be any depth within the chain (not just the root).
 	if hovered == value:
 		return
 	hovered = value
 	_refresh_visual()
-	if is_world_card():
-		_animate_step_chain(STEP_EXPANDED if value else STEP_COLLAPSED)
 
 func set_targeted(value: bool) -> void:
 	if targeted == value:
@@ -341,7 +355,6 @@ func attach_below(other: Card) -> void:
 	# next peek slot. Tweens position/scale/rotation so drops don't snap.
 	var leaf := get_stack_top()
 	var root := get_chain_root()
-	var step := root._step
 	# reparent() preserves global transform, so the visual doesn't jump.
 	if other.get_parent() != leaf:
 		other.reparent(leaf)
@@ -353,57 +366,108 @@ func attach_below(other: Card) -> void:
 	# offset cascades down the chain — newer-on-top for free.
 	other.z_index = ZLayers.STACK_CHILD_OFFSET
 	other._kill_step_tween()
-	other._step = step
-	# Mark as attaching so _propagate_step (driven by hover-expansion on the
-	# chain root) doesn't overwrite our in-flight position.
+	other._step = root._target_step_for_child(other)
+	# Mark as attaching so the chain-layout writers (driven by hover changes
+	# on the chain root) don't overwrite our in-flight position.
 	other._attaching = true
 	other._attach_start_pos = other.position
 	var t := other.create_tween().set_parallel(true)
-	# Target tracks the chain root's live _step — if hover expands the chain
-	# mid-attach, we slide to the expanded slot instead of fighting it.
+	# Target is recomputed each frame from the chain root's live hover state,
+	# so if hover changes mid-attach we slide to the new slot.
 	t.tween_method(other._update_attach_position, 0.0, 1.0, ATTACH_DURATION) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	t.tween_property(other, "scale", Vector2.ONE, ATTACH_DURATION) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_IN_OUT)
 	t.tween_property(other, "rotation", 0.0, ATTACH_DURATION)
 	t.finished.connect(other._on_attach_done)
-	# Re-propagate step in case `other` brought a subtree with stale offsets.
-	# (_propagate_step skips `other` itself while _attaching.)
-	root._propagate_step(step)
+	# Re-snap chain layout in case `other` brought a subtree with stale
+	# offsets. (Skips `other` itself while _attaching.)
+	root._snap_chain_layout()
 
 func _update_attach_position(t: float) -> void:
-	var target := Vector2(0.0, get_chain_root()._step)
+	var target := Vector2(0.0, get_chain_root()._target_step_for_child(self))
 	position = _attach_start_pos.lerp(target, t)
 
 func _on_attach_done() -> void:
 	_attaching = false
-	position = Vector2(0.0, get_chain_root()._step)
+	position = Vector2(0.0, get_chain_root()._target_step_for_child(self))
 
-func _animate_step_chain(target: float) -> void:
-	# Drives the whole chain's peek toward `target`. Called only on the chain
-	# root (PlaySpace forwards hover events to root).
+# ---------------------------------------------------------------------------
+# Per-card chain layout (called on the chain root only).
+#
+# The chain root tracks `_hover_card_in_chain` — the single card the cursor
+# is currently over. The card directly below it in the chain takes
+# STEP_EXPANDED (so the hovered card reveals more of its body); every other
+# child→parent gap stays at STEP_COLLAPSED. Cards below the expanded slot
+# are pushed down rigidly via inherited transforms — they don't themselves
+# expand. PlaySpace calls set_chain_hover_target whenever the card under
+# the cursor changes; null collapses the whole chain.
+#
+# Hit testing in PlaySpace compensates for the visual shift: descendants of
+# the hovered card keep their collapsed-position pick areas, so the player's
+# cursor only has to travel STEP_COLLAPSED to move hover to the next card.
+
+func set_chain_hover_target(card: Card) -> void:
+	if _hover_card_in_chain == card:
+		return
+	_hover_card_in_chain = card
+	_animate_chain_layout()
+
+func _target_step_for_child(child_card: Card) -> float:
+	# Called on the chain root. Returns the step `child_card` should sit at
+	# from its parent — STEP_EXPANDED iff its parent is the currently-hovered
+	# card in this chain.
+	var parent := child_card.get_parent() as Card
+	if parent != null and parent == _hover_card_in_chain:
+		return STEP_EXPANDED
+	return STEP_COLLAPSED
+
+func _snap_chain_layout() -> void:
+	# Instantly set every descendant to its target step. Used when a snap is
+	# preferred over a tween (drag begin, post-attach re-sync). Cards mid-
+	# attach own their position via the attach tween — skip the write so the
+	# two animations don't fight (their _step is still updated so the attach
+	# tween's destination is correct).
 	_kill_step_tween()
+	var c := Card.next_chain_child(self)
+	while c != null:
+		var target := _target_step_for_child(c)
+		c._step = target
+		if not c._attaching:
+			c.position = Vector2(0.0, target)
+		c = Card.next_chain_child(c)
+
+func _animate_chain_layout() -> void:
+	# Tween every descendant from its current step toward its target step.
+	# Each card has its own start/target so a previously-expanded slot can
+	# collapse while a new slot expands in the same tween.
+	_kill_step_tween()
+	var entries: Array = []
+	var c := Card.next_chain_child(self)
+	while c != null:
+		entries.append([c, c._step, _target_step_for_child(c)])
+		c = Card.next_chain_child(c)
+	_pending_chain_entries = entries
 	_step_tween = create_tween()
-	_step_tween.tween_method(_propagate_step, _step, target, STEP_TWEEN_DURATION) \
+	_step_tween.tween_method(_apply_chain_step_progress, 0.0, 1.0, STEP_TWEEN_DURATION) \
 		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+
+func _apply_chain_step_progress(t: float) -> void:
+	for e in _pending_chain_entries:
+		var card_node: Card = e[0]
+		if not is_instance_valid(card_node):
+			continue
+		var start: float = e[1]
+		var target: float = e[2]
+		var v: float = lerp(start, target, t)
+		card_node._step = v
+		if not card_node._attaching:
+			card_node.position = Vector2(0.0, v)
 
 func _kill_step_tween() -> void:
 	if _step_tween != null and _step_tween.is_valid():
 		_step_tween.kill()
 	_step_tween = null
-
-func _propagate_step(value: float) -> void:
-	# Set every descendant card's local position to (0, value) so the whole
-	# chain shares the same peek spacing. Cards mid-attach own their position
-	# via the attach tween — skip the write for them so the two animations
-	# don't fight.
-	_step = value
-	var c := Card.next_chain_child(self)
-	while c != null:
-		c._step = value
-		if not c._attaching:
-			c.position = Vector2(0.0, value)
-		c = Card.next_chain_child(c)
 
 # ---------------------------------------------------------------------------
 # Hit testing

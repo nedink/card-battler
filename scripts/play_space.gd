@@ -72,8 +72,11 @@ var _drag_offset_local: Vector2 = Vector2.ZERO   # cursor → root, in our local
 var _drag_origin_cell: Vector2i = Vector2i.ZERO
 var _drag_press_screen: Vector2 = Vector2.ZERO
 
-# Hover (when no drag is in progress). Always points at a chain root, not at
-# a deeper card — hovering anywhere on a stack expands the whole chain.
+# Hover (when no drag is in progress). _hovered_card is the actual deepest
+# card under the cursor (so its border lights up and the chain-step layout
+# expands the slot just below it); _hovered_root is its chain root, tracked
+# separately so hover-z lift covers the whole stack.
+var _hovered_card: Card = null
 var _hovered_root: Card = null
 
 # Pan state.
@@ -290,7 +293,11 @@ func _begin_drag_active() -> void:
 	# Drop hover so two highlights don't fight.
 	_clear_hover()
 	# Collapse the dragged stack's peek so it reads as one chunk while flying.
-	_drag_root._propagate_step(Card.STEP_COLLAPSED)
+	# _clear_hover above already cleared _hover_card_in_chain on whatever root
+	# was previously hovered — but the dragged root may not be that one, so
+	# clear and snap explicitly.
+	_drag_root._hover_card_in_chain = null
+	_drag_root._snap_chain_layout()
 	_drag_root._step = Card.STEP_COLLAPSED
 
 func _drive_drag() -> void:
@@ -386,21 +393,28 @@ func _update_hover_under(screen_pos: Vector2) -> void:
 		_clear_hover()
 		return
 	var hit := _find_card_under(screen_pos, null)
-	var root: Card = null if hit == null else hit.get_chain_root()
-	if root == _hovered_root:
+	if hit == _hovered_card:
 		return
 	_clear_hover()
-	_hovered_root = root
-	if root != null:
-		root.set_hovered(true)
+	_hovered_card = hit
+	if hit != null:
+		_hovered_root = hit.get_chain_root()
+		hit.set_hovered(true)
 		# Lift the whole chain above settled neighbours while hovered (children
 		# inherit z relative to root, so the lift cascades for free).
-		root.z_index = ZLayers.HOVER
+		_hovered_root.z_index = ZLayers.HOVER
+		# Expand the slot directly below the hovered card so just that card's
+		# body reveals more — descendants are pushed down by the extra peek
+		# but stay at STEP_COLLAPSED relative to each other.
+		_hovered_root.set_chain_hover_target(hit)
 
 func _clear_hover() -> void:
+	if _hovered_card != null and is_instance_valid(_hovered_card):
+		_hovered_card.set_hovered(false)
 	if _hovered_root != null and is_instance_valid(_hovered_root):
-		_hovered_root.set_hovered(false)
+		_hovered_root.set_chain_hover_target(null)
 		_apply_natural_z(_hovered_root)
+	_hovered_card = null
 	_hovered_root = null
 
 # ---------------------------------------------------------------------------
@@ -409,21 +423,37 @@ func _clear_hover() -> void:
 # The chain is parent→child along scene order, with newer cards in front
 # (z = parent_z + 1). We want to return the topmost-rendered card under the
 # cursor, which is the deepest descendant in the chain that contains the point.
+#
+# Hover-expansion compensation: when a card in the chain is hovered, its child
+# sits at STEP_EXPANDED instead of STEP_COLLAPSED, which visually pushes that
+# child and every later descendant down by (STEP_EXPANDED - STEP_COLLAPSED).
+# We intentionally do NOT push their hit areas down with them — the player
+# should only need to travel STEP_COLLAPSED to move the hover from one card
+# to the next, regardless of how much the slot has expanded. Walking the
+# chain we accumulate each card's shift-from-collapsed and shift the world
+# test point by the same amount before testing, so each card is hit-tested
+# at its collapsed position.
 
 func _find_card_under(world_point: Vector2, exclude_root: Card) -> Card:
 	var best: Card = null
 	var best_depth: int = -1
+	var s := scale.y
 	for r in _roots():
 		if r == exclude_root:
 			continue
 		var n: Card = r
 		var depth := 0
+		var visual_offset_local := 0.0
 		while n != null:
-			if n.contains_point_world(world_point):
+			var test_pt := world_point + Vector2(0.0, visual_offset_local * s)
+			if n.contains_point_world(test_pt):
 				if depth > best_depth:
 					best_depth = depth
 					best = n
-			n = Card.next_chain_child(n)
+			var next := Card.next_chain_child(n)
+			if next != null:
+				visual_offset_local += next._step - Card.STEP_COLLAPSED
+			n = next
 			depth += 1
 	return best
 
