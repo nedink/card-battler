@@ -102,6 +102,9 @@ var input_paused: bool = false:
 # Set by main.gd. Used to defer when the hand is busy.
 var hand: Node = null
 
+# Set by main.gd. Played once per new card-hover acquisition.
+var hover_audio: AudioStreamPlayer2D = null
+
 # Anchor where card-back arcs originate. Set by main.gd from the planet deck's
 # global position.
 var _planet_deck_position: Vector2 = Vector2(1180, 40)
@@ -400,6 +403,8 @@ func _update_hover_under(screen_pos: Vector2) -> void:
 	if hit != null:
 		_hovered_root = hit.get_chain_root()
 		hit.set_hovered(true)
+		if hover_audio != null:
+			hover_audio.play()
 		# Lift the whole chain above settled neighbours while hovered (children
 		# inherit z relative to root, so the lift cascades for free).
 		_hovered_root.z_index = ZLayers.HOVER

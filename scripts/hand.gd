@@ -41,6 +41,9 @@ var can_play_card: Callable = Callable()
 var play_space: Node = null
 var _last_targeted_planet: Node = null
 
+# Set by main.gd. Played once per new card-hover acquisition.
+var hover_audio: AudioStreamPlayer2D = null
+
 # Set true by main.gd while a modal overlay is up (e.g. the pile viewer). When
 # paused, the hand drops any active hover and skips hover/drag tracking so
 # cards don't lift in response to mouse movement under the modal.
@@ -259,6 +262,8 @@ func _update_hover() -> void:
 	if found != null:
 		found.set_hovered(true)
 		found.z_index = ZLayers.HAND_HOVER
+		if hover_audio != null:
+			hover_audio.play()
 
 func _point_in_card(card: Card, world_point: Vector2) -> bool:
 	# Hit-test against the rest pose, expanded upward to cover the hover lift.

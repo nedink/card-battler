@@ -80,6 +80,7 @@ enum Phase { DRAW, PLAY, END_TURN }
 @onready var end_turn_button: Button = $EndTurnButton
 @onready var card_shuffle_audio: AudioStreamPlayer2D = $CardShuffleAudioStreamPlayer2D
 @onready var card_slap_audio: AudioStreamPlayer2D = $CardSlapAudioStreamPlayer2D
+@onready var card_hover_audio: AudioStreamPlayer2D = $CardHoverAudioStreamPlayer2D
 # Cast required because the script class_name doesn't propagate through
 # `$NodePath` lookup (the static root type is `CanvasLayer`).
 @onready var pile_viewer: PileViewer = $PileViewer as PileViewer
@@ -95,6 +96,8 @@ func _ready() -> void:
 	hand.card_played.connect(_on_card_played)
 	hand.play_space = play_space
 	play_space.hand = hand
+	hand.hover_audio = card_hover_audio
+	play_space.hover_audio = card_hover_audio
 	play_space.set_planet_deck_position(planet_deck.global_position)
 	end_turn_button.pressed.connect(_on_end_turn)
 	# Pile-viewer wiring: clicking any pile pops a viewer with its contents.

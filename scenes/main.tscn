@@ -12,6 +12,10 @@
 [ext_resource type="AudioStream" uid="uid://c24t86yxax8c4" path="res://data/sounds/slap/1.wav" id="10_trceg"]
 [ext_resource type="AudioStream" uid="uid://cbfq5mguko7qj" path="res://data/sounds/slap/2.wav" id="11_a8y0u"]
 [ext_resource type="AudioStream" uid="uid://c7krnkujqyp4m" path="res://data/sounds/slap/3.wav" id="12_jkv2x"]
+[ext_resource type="AudioStream" uid="uid://cm30wkj2bkbat" path="res://data/sounds/hover/1.wav" id="14_hov1"]
+[ext_resource type="AudioStream" uid="uid://cdweuk5p346et" path="res://data/sounds/hover/2.wav" id="15_hov2"]
+[ext_resource type="AudioStream" uid="uid://batckta413ag4" path="res://data/sounds/hover/3.wav" id="16_hov3"]
+[ext_resource type="AudioStream" uid="uid://ce0o3x7676o3u" path="res://data/sounds/hover/4.wav" id="17_hov4"]
 
 [sub_resource type="StyleBoxFlat" id="SB_endbtn"]
 bg_color = Color(0.2, 0.45, 0.65, 1)
@@ -43,6 +47,13 @@ streams_count = 3
 stream_0/stream = ExtResource("10_trceg")
 stream_1/stream = ExtResource("11_a8y0u")
 stream_2/stream = ExtResource("12_jkv2x")
+
+[sub_resource type="AudioStreamRandomizer" id="AudioStreamRandomizer_hover"]
+streams_count = 4
+stream_0/stream = ExtResource("14_hov1")
+stream_1/stream = ExtResource("15_hov2")
+stream_2/stream = ExtResource("16_hov3")
+stream_3/stream = ExtResource("17_hov4")
 
 [node name="Main" type="Node2D" unique_id=1172728585]
 script = ExtResource("1_main")
@@ -105,3 +116,7 @@ stream = SubResource("AudioStreamRandomizer_jbj1t")
 
 [node name="CardSlapAudioStreamPlayer2D" type="AudioStreamPlayer2D" parent="." unique_id=236552670]
 stream = SubResource("AudioStreamRandomizer_muem4")
+
+[node name="CardHoverAudioStreamPlayer2D" type="AudioStreamPlayer2D" parent="." unique_id=236552671]
+stream = SubResource("AudioStreamRandomizer_hover")
+volume_db = -6.0
