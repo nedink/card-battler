@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="CardData" load_steps=2 format=3]
+[gd_resource type="Resource" script_class="CardData" format=3 uid="uid://byo6xv2fn2a30"]
 
 [ext_resource type="Script" uid="uid://cclp6ov8d68s" path="res://scripts/card_data.gd" id="1"]
 
@@ -6,4 +6,4 @@
 script = ExtResource("1")
 card_name = "Tide's End"
 card_types = Array[String](["planet"])
-planet_type = "Oceanic"
+planet_types = Array[String](["Oceanic", "Rocky"])

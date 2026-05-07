@@ -1,10 +1,13 @@
 [gd_resource type="Resource" script_class="CardData" format=3 uid="uid://8y0gxd5ux4n0"]
 
 [ext_resource type="Script" uid="uid://cclp6ov8d68s" path="res://scripts/card_data.gd" id="1"]
+[ext_resource type="Resource" path="res://data/resources/nitrogen.tres" id="2"]
 
 [resource]
 script = ExtResource("1")
 card_name = "Nitrogen Fixer"
-body = "Harvest atmospheric nitrogen."
+body = "Builds on Gas Giant / Rocky. Mints Nitrogen on placement."
 card_types = Array[String](["building", "nitrogen_fixer"])
 can_stack = Array[String](["planet"])
+can_stack_any = Array[String](["Gas Giant", "Rocky"])
+spawns_on_placement = Array[ExtResource("1")]([ExtResource("2")])

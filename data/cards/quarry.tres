@@ -1,10 +1,13 @@
 [gd_resource type="Resource" script_class="CardData" format=3 uid="uid://bfycbytm14m48"]
 
 [ext_resource type="Script" uid="uid://cclp6ov8d68s" path="res://scripts/card_data.gd" id="1"]
+[ext_resource type="Resource" path="res://data/resources/stone.tres" id="2"]
 
 [resource]
 script = ExtResource("1")
 card_name = "Quarry"
-body = "Harvest stone, sand, and gravel."
+body = "Builds on Rocky. Mints Stone on placement."
 card_types = Array[String](["building", "quarry"])
 can_stack = Array[String](["planet"])
+can_stack_any = Array[String](["Rocky"])
+spawns_on_placement = Array[ExtResource("1")]([ExtResource("2")])

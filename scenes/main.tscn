@@ -78,9 +78,6 @@ text = "End Turn (SPACE)"
 
 [node name="PlaySpace" parent="." unique_id=295236987 instance=ExtResource("5_play_space")]
 
-[node name="PlanetDeck" parent="." unique_id=940339789 instance=ExtResource("3_deck_scene")]
-position = Vector2(1180, 130)
-
 [node name="PlayerDeck" parent="." unique_id=583510850 instance=ExtResource("3_deck_scene")]
 position = Vector2(80, 620)
 
@@ -107,7 +104,7 @@ offset_right = 1060.0
 offset_bottom = 70.0
 theme_override_colors/font_color = Color(0.85, 0.85, 0.95, 1)
 theme_override_font_sizes/font_size = 13
-text = "Each turn reveals a card from the discovery deck. Drag Colony onto a planet. Click any pile to view. SPACE: end turn. ESC: close."
+text = "Play Discover to reveal a new world. Drag Colony onto a planet. Click any pile to view. SPACE: end turn. ESC: close."
 
 [node name="PileViewer" parent="." unique_id=792158431 instance=ExtResource("9_pv")]
 

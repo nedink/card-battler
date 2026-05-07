@@ -105,12 +105,13 @@ var hand: Node = null
 # Set by main.gd. Played once per new card-hover acquisition.
 var hover_audio: AudioStreamPlayer2D = null
 
-# Anchor where card-back arcs originate. Set by main.gd from the planet deck's
-# global position.
-var _planet_deck_position: Vector2 = Vector2(1180, 40)
+# Origin (world space) for cards that fly into the play space — defaults to
+# off-screen right and is overridable. Used by emit_card_to_cell and
+# emit_card_onto_stack.
+var _offscreen_origin: Vector2 = Vector2(1480.0, 240.0)
 
-func set_planet_deck_position(world_pos: Vector2) -> void:
-	_planet_deck_position = world_pos
+func set_offscreen_origin(world_pos: Vector2) -> void:
+	_offscreen_origin = world_pos
 
 # ---------------------------------------------------------------------------
 # Public board API
@@ -554,14 +555,14 @@ func find_empty_cell_in_view() -> Vector2i:
 	return candidates[0]
 
 # ---------------------------------------------------------------------------
-# Emit-arc animations (card-back from the planet deck → settle on the board).
+# Emit-arc animations (card-back from off-screen origin → settle on the board).
 
 func emit_card_to_cell(data: CardData) -> void:
 	# A new top-level entity (planet, alien ship) — flies into a free cell.
 	var cell := find_empty_cell_in_view()
 	var target := _cell_to_local(cell)
 	var target_global := to_global(target)
-	_run_arc(_planet_deck_position, target_global, _on_emit_cell_arrived.bind(data, target, cell))
+	_run_arc(_offscreen_origin, target_global, _on_emit_cell_arrived.bind(data, target, cell))
 
 func emit_card_onto_stack(data: CardData, anchor_tag: String) -> void:
 	# A new card stacked onto an existing anchor (journal entries → journal).
@@ -569,7 +570,7 @@ func emit_card_onto_stack(data: CardData, anchor_tag: String) -> void:
 	if anchor == null:
 		return
 	var target_global: Vector2 = anchor.get_stack_top().global_position
-	_run_arc(_planet_deck_position, target_global, _on_emit_stack_arrived.bind(data, anchor))
+	_run_arc(_offscreen_origin, target_global, _on_emit_stack_arrived.bind(data, anchor))
 
 func _run_arc(start_global: Vector2, end_global: Vector2, on_done: Callable) -> void:
 	var back: Node2D = CARD_BACK_SCENE.instantiate()

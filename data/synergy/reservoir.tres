@@ -1,0 +1,15 @@
+[gd_resource type="Resource" script_class="CardData" format=3]
+
+[ext_resource type="Script" uid="uid://cclp6ov8d68s" path="res://scripts/card_data.gd" id="1"]
+[ext_resource type="Resource" path="res://data/resources/water.tres" id="2"]
+
+[resource]
+script = ExtResource("1")
+card_name = "Reservoir"
+body = "When you play a liquid, gain Water."
+card_types = Array[String](["building", "synergy", "reservoir"])
+can_stack = Array[String](["planet"])
+can_stack_any = Array[String](["Rocky", "Oceanic", "Ice"])
+triggers_on_play_tags = Array[String](["liquid"])
+effect_id = "add_to_discard"
+effect_payload = ExtResource("2")

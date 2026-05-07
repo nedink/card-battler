@@ -30,6 +30,19 @@ signal card_played(card: Card, target_planet)
 var cards: Array[Card] = []
 var _hovered_card: Card = null
 var _dragging_card: Card = null
+# EMA of the dragging card's parent-local velocity. Sampled per-frame from
+# card.position deltas while dragging, then handed off to the card on release
+# so threshold-played cards drift in the direction of the final mouse motion.
+var _drag_velocity: Vector2 = Vector2.ZERO
+var _drag_last_pos: Vector2 = Vector2.ZERO
+# Skip the first frame's sample — at drag start, card.position is the rest pose
+# and snaps to the cursor on the next update, which would register as a huge
+# spurious velocity.
+var _drag_velocity_seeded: bool = false
+# Per-second response of the velocity EMA. Higher = tracks recent motion more
+# tightly (better for "what was the mouse doing at release?"); lower = smooths
+# more across the full drag.
+const DRAG_VELOCITY_RESPONSE := 25.0
 # Optional Callable(card: Card) -> bool. When set, used to gate plays — a card
 # only counts as play-ready if this returns true. Lets Hand stay decoupled from
 # whatever play-gating the game wants (e.g. a future modal that disables plays).
@@ -49,7 +62,7 @@ var hover_audio: AudioStreamPlayer2D = null
 # cards don't lift in response to mouse movement under the modal.
 var input_paused: bool = false
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if Engine.is_editor_hint():
 		return
 	if input_paused or _play_space_busy():
@@ -62,6 +75,7 @@ func _process(_delta: float) -> void:
 	if _dragging_card != null:
 		var mouse := get_global_mouse_position()
 		_dragging_card.update_drag_position(mouse)
+		_sample_drag_velocity(delta)
 		if _dragging_card.releases_on_threshold:
 			_set_targeted_planet(null)
 			# Live feedback: green = release-to-play, neutral = release-returns-to-hand.
@@ -85,7 +99,7 @@ func _find_stack_target(mouse: Vector2, card: Card):
 	var hit = play_space.get_planet_under_cursor(mouse)
 	if hit == null:
 		return null
-	if hit.has_method("can_accept_stack") and not hit.can_accept_stack(card.can_stack):
+	if hit.has_method("can_accept_stack") and not hit.can_accept_stack(card.can_stack, card.can_stack_any):
 		return null
 	return hit
 
@@ -163,8 +177,22 @@ func _start_drag(card: Card) -> void:
 	card.set_hovered(false)
 	card.start_drag()
 	card.z_index = ZLayers.HAND_DRAG
+	_drag_velocity = Vector2.ZERO
+	_drag_last_pos = card.position
+	_drag_velocity_seeded = false
 	# Re-layout the remaining cards so the gap closes immediately.
 	layout()
+
+func _sample_drag_velocity(delta: float) -> void:
+	if _dragging_card == null or delta <= 0.0:
+		return
+	var pos := _dragging_card.position
+	if _drag_velocity_seeded:
+		var inst_v: Vector2 = (pos - _drag_last_pos) / delta
+		var blend := 1.0 - exp(-delta * DRAG_VELOCITY_RESPONSE)
+		_drag_velocity = _drag_velocity.lerp(inst_v, blend)
+	_drag_last_pos = pos
+	_drag_velocity_seeded = true
 
 func _end_drag() -> void:
 	var card := _dragging_card
@@ -172,6 +200,9 @@ func _end_drag() -> void:
 	if card.releases_on_threshold:
 		if _card_clears_threshold(card) and _is_card_playable(card):
 			# Released outside the hand zone with a playable card: remove and fly off.
+			# Hand off the final drag velocity so the SETTLE phase carries the
+			# card in the direction of the player's gesture before homing in.
+			card.set_release_velocity(_drag_velocity)
 			cards.erase(card)
 			layout()
 			card_played.emit(card, null)

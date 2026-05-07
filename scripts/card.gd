@@ -28,6 +28,19 @@ const SETTLE_SPEED := 14.0
 const FLY_SETTLE_SPEED := 9.0
 const SETTLE_DURATION := 0.55
 const ARC_DURATION := 0.55
+# Release-momentum decay during the SETTLE phase. The velocity at release
+# carries the card in its travel direction before the lerp pulls it to the
+# showcase target. Tuned so velocity dies faster than the lerp pulls
+# (decay > FLY_SETTLE_SPEED) — that way the path peaks in the gesture
+# direction, then the lerp's exponential curve dominates the return so the
+# card lands close to centre before SETTLE ends.
+const RELEASE_VELOCITY_DECAY := 7.0
+# Boosts the raw drag velocity so the gesture reads as a deliberate throw
+# rather than a faint drift. Applied before the cap.
+const RELEASE_VELOCITY_GAIN := 1.8
+# Cap on the final (post-gain) release velocity so a fast flick can't fling
+# the card off screen before the lerp catches up.
+const RELEASE_VELOCITY_MAX := 4000.0
 const SHOWCASE_SCALE := 1.15
 const FINAL_SCALE := 0.4
 const ARC_PEAK_HEIGHT := 160.0
@@ -79,8 +92,18 @@ const TYPE_COLORS := {
 	"Gas Giant": Color(0.88, 0.66, 0.38),
 	"Journal": Color(0.32, 0.26, 0.18),
 	"Ship": Color(0.55, 0.20, 0.55),
+	"Star": Color(1.00, 0.85, 0.35),
 }
 const FALLBACK_TYPE_COLOR := Color(0.5, 0.5, 0.5)
+
+# Resource cards get a distinct teal palette so they read as a different
+# category from parchment play cards.
+const RESOURCE_BG := Color(0.62, 0.86, 0.84)
+const RESOURCE_HOVER_BG := Color(0.74, 0.94, 0.92)
+const RESOURCE_READY_BG := Color(0.78, 0.98, 0.78)
+const RESOURCE_BORDER := Color(0.10, 0.30, 0.32)
+const RESOURCE_HOVER_BORDER := Color(0.20, 0.65, 0.70)
+const RESOURCE_READY_BORDER := Color(0.25, 0.85, 0.35)
 
 # Auto-shrink the name/body labels if their text gets long.
 const NAME_FONT_SIZES := [[12, 18], [14, 16], [999, 14]]
@@ -99,6 +122,7 @@ enum FlyPhase { NONE, SETTLE, ARC }
 var data: CardData = null
 var card_types: Array[String] = []
 var can_stack: Array[String] = []
+var can_stack_any: Array[String] = []
 var releases_on_threshold: bool = false
 
 # Runtime state. Used by ageing for buildings (see main._age_buildings).
@@ -122,6 +146,10 @@ var grid_cell: Vector2i = Vector2i.ZERO
 var _fly_phase: int = FlyPhase.NONE
 var _settle_timer: float = 0.0
 var _showcase_target_local: Vector2 = Vector2.ZERO
+# Carry-over from the drag release. Applied during SETTLE so the card drifts
+# in the direction of the final mouse motion before the lerp reels it toward
+# the showcase target. In the card's parent (= Hand) local frame.
+var _release_velocity: Vector2 = Vector2.ZERO
 var _fly_tween: Tween = null
 var _arc_start: Vector2 = Vector2.ZERO
 var _arc_control: Vector2 = Vector2.ZERO
@@ -168,14 +196,24 @@ func _ready() -> void:
 func configure(p_data: CardData) -> void:
 	data = p_data
 	card_types = p_data.card_types.duplicate()
+	# Planet types double as card_types tags so building can_stack rules can
+	# require specific planet types (e.g. ["planet", "Oceanic"]). Folded here
+	# so .tres authors don't have to repeat themselves.
+	for pt in p_data.planet_types:
+		if not (pt in card_types):
+			card_types.append(pt)
 	can_stack = p_data.can_stack.duplicate()
+	can_stack_any = p_data.can_stack_any.duplicate()
 	releases_on_threshold = p_data.releases_on_threshold
 	if is_node_ready():
 		_apply_data_visuals()
 		_refresh_visual()
 
 func is_world_card() -> bool:
-	return ("planet" in card_types) or ("journal" in card_types) or ("alien_ship" in card_types)
+	return ("planet" in card_types) or ("journal" in card_types) or ("alien_ship" in card_types) or ("star" in card_types)
+
+func is_resource_card() -> bool:
+	return "resource" in card_types
 
 func _apply_data_visuals() -> void:
 	if data == null:
@@ -183,19 +221,26 @@ func _apply_data_visuals() -> void:
 	var is_planet := "planet" in card_types
 	var is_journal := "journal" in card_types
 	var is_ship := "alien_ship" in card_types
-	var world_kind := is_planet or is_journal or is_ship
+	var is_star := "star" in card_types
+	var world_kind := is_planet or is_journal or is_ship or is_star
+	var is_resource := is_resource_card()
 
 	_name_label.text = data.card_name
 	_name_label.add_theme_font_size_override("font_size", _font_size_for(data.card_name.length(), NAME_FONT_SIZES))
 	_name_label.add_theme_color_override("font_color", Color(1, 1, 1) if world_kind else Color(0.1, 0.08, 0.05))
 
-	_sphere.visible = is_planet
+	_sphere.visible = is_planet or is_star
 	_type_label.visible = is_planet
 	if is_planet:
-		_type_label.text = data.planet_type
-		var color := _color_for_type(data.planet_type)
+		var type_str := " / ".join(data.planet_types) if not data.planet_types.is_empty() else ""
+		_type_label.text = type_str
+		var color := _color_for_planet_types(data.planet_types)
 		_apply_sphere_color(color)
 		_apply_world_body_color(color)
+	elif is_star:
+		var star_color: Color = TYPE_COLORS["Star"]
+		_apply_sphere_color(star_color)
+		_apply_world_body_color(star_color)
 	elif is_journal:
 		_apply_world_body_color(TYPE_COLORS["Journal"])
 	elif is_ship:
@@ -206,10 +251,9 @@ func _apply_data_visuals() -> void:
 		_body_label.text = data.body
 		if _body_label_settings != null:
 			_body_label_settings.font_size = _font_size_for(data.body.length(), BODY_FONT_SIZES)
-		# Reset to play-card body color (in case this card was previously a
-		# world card and got tinted dark). Refresh_visual will pick the right
-		# bg/border for the current state.
-		_body_stylebox.bg_color = PLAY_BG
+		# Reset to the appropriate baseline body color. Refresh_visual will
+		# overwrite for hover/ready states.
+		_body_stylebox.bg_color = RESOURCE_BG if is_resource else PLAY_BG
 
 static func _font_size_for(length: int, table: Array) -> int:
 	for entry in table:
@@ -217,18 +261,13 @@ static func _font_size_for(length: int, table: Array) -> int:
 			return entry[1]
 	return table[-1][1]
 
-func _color_for_type(type_string: String) -> Color:
-	var parts: Array = []
-	for raw in type_string.replace("/", ",").split(","):
-		var t := raw.strip_edges()
-		if t != "":
-			parts.append(t)
-	if parts.is_empty():
+func _color_for_planet_types(types: Array) -> Color:
+	if types.is_empty():
 		return FALLBACK_TYPE_COLOR
 	var sum := Color(0, 0, 0, 0)
-	for t in parts:
+	for t in types:
 		sum += TYPE_COLORS.get(t, FALLBACK_TYPE_COLOR)
-	var inv := 1.0 / float(parts.size())
+	var inv := 1.0 / float(types.size())
 	return Color(sum.r * inv, sum.g * inv, sum.b * inv, 1.0)
 
 func _apply_sphere_color(color: Color) -> void:
@@ -283,6 +322,19 @@ func _refresh_visual() -> void:
 		else:
 			_body_stylebox.border_color = WORLD_BORDER
 			w = WORLD_BORDER_W_NORMAL
+	elif is_resource_card():
+		if play_ready:
+			_body_stylebox.bg_color = RESOURCE_READY_BG
+			_body_stylebox.border_color = RESOURCE_READY_BORDER
+			w = PLAY_BORDER_W_READY
+		elif hovered:
+			_body_stylebox.bg_color = RESOURCE_HOVER_BG
+			_body_stylebox.border_color = RESOURCE_HOVER_BORDER
+			w = PLAY_BORDER_W_HOVER
+		else:
+			_body_stylebox.bg_color = RESOURCE_BG
+			_body_stylebox.border_color = RESOURCE_BORDER
+			w = PLAY_BORDER_W_NORMAL
 	else:
 		if play_ready:
 			_body_stylebox.bg_color = PLAY_READY_BG
@@ -341,12 +393,22 @@ static func disable_input_subtree(node: Node) -> void:
 func get_stack_top_card_types() -> Array:
 	return get_stack_top().card_types
 
-func can_accept_stack(p_can_stack: Array) -> bool:
+func can_accept_stack(p_can_stack: Array, p_can_stack_any: Array = []) -> bool:
 	# True iff the chain leaf's card_types contains every tag the dragged card
-	# requires. Empty p_can_stack matches anything.
+	# requires (AND), AND at least one of p_can_stack_any when that is non-empty.
+	# Empty p_can_stack matches anything; empty p_can_stack_any disables the
+	# OR-gate.
 	var top: Array = get_stack_top_card_types()
 	for tag in p_can_stack:
 		if not (tag in top):
+			return false
+	if not p_can_stack_any.is_empty():
+		var matched := false
+		for tag in p_can_stack_any:
+			if tag in top:
+				matched = true
+				break
+		if not matched:
 			return false
 	return true
 
@@ -491,6 +553,7 @@ func start_drag() -> void:
 	_kill_fly_tween()
 	_state = State.DRAGGING_HAND
 	set_play_ready(false)
+	_release_velocity = Vector2.ZERO
 
 func update_drag_position(world_pos: Vector2) -> void:
 	if _state != State.DRAGGING_HAND:
@@ -512,6 +575,15 @@ func end_drag_fly(target_world_pos: Vector2, showcase_world_pos: Vector2) -> voi
 	_showcase_target_local = _to_parent_local(showcase_world_pos)
 	_fly_phase = FlyPhase.SETTLE
 	_settle_timer = SETTLE_DURATION
+
+func set_release_velocity(parent_local_velocity: Vector2) -> void:
+	# Caller (Hand) measures velocity in this card's parent-local frame while
+	# dragging. Gained up so the throw reads, then clamped so a fast flick
+	# can't overshoot the lerp's authority.
+	var v := parent_local_velocity * RELEASE_VELOCITY_GAIN
+	if v.length() > RELEASE_VELOCITY_MAX:
+		v = v.normalized() * RELEASE_VELOCITY_MAX
+	_release_velocity = v
 
 func discard_fly(target_world_pos: Vector2) -> void:
 	# Skip the showcase phase — straight into the arc.
@@ -592,7 +664,12 @@ func _process(delta: float) -> void:
 		rotation = lerp_angle(rotation, 0.0, t)
 	elif _state == State.FLYING and _fly_phase == FlyPhase.SETTLE:
 		var settle_t := 1.0 - exp(-delta * FLY_SETTLE_SPEED)
+		# Lerp pulls toward the showcase target first; momentum is then layered
+		# on top so the lerp doesn't immediately reabsorb it. Velocity decays
+		# exponentially so the lerp wins out by the end of the SETTLE window.
 		position = position.lerp(_showcase_target_local, settle_t)
+		position += _release_velocity * delta
+		_release_velocity *= exp(-delta * RELEASE_VELOCITY_DECAY)
 		rotation = lerp_angle(rotation, 0.0, settle_t)
 		scale = scale.lerp(Vector2.ONE * SHOWCASE_SCALE, settle_t)
 		_settle_timer -= delta

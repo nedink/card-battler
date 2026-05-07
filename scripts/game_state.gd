@@ -21,9 +21,5 @@ var player_deck: Array = []            # Array[CardData] — waiting to be drawn
 var player_discard: Array = []         # Array[CardData] — recycle into the deck
 var player_exile: Array = []           # Array[CardData] — removed for the run
 
-# Discovery deck — face-down pool of CardData, popped one per turn. Per-card
-# tags decide where the entry settles on the board.
-var planet_deck_data: Array = []       # Array[CardData]
-
 var turn_number: int = 1
 var total_buildings_placed: int = 0

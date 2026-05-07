@@ -5,6 +5,8 @@
 [resource]
 script = ExtResource("1")
 card_name = "Discover"
-body = "Reveal a new planet."
+body = "Reveal a new world. Exile this card."
 card_types = Array[String](["discover"])
 releases_on_threshold = true
+exiles_on_play = true
+effect_id = "discover"

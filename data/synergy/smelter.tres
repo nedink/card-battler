@@ -1,0 +1,14 @@
+[gd_resource type="Resource" script_class="CardData" format=3]
+
+[ext_resource type="Script" uid="uid://cclp6ov8d68s" path="res://scripts/card_data.gd" id="1"]
+
+[resource]
+script = ExtResource("1")
+card_name = "Smelter"
+body = "When you play Metal Ore, draw 1."
+card_types = Array[String](["building", "synergy", "smelter"])
+can_stack = Array[String](["planet"])
+can_stack_any = Array[String](["Rocky"])
+triggers_on_play_tags = Array[String](["metal_ore"])
+effect_id = "draw"
+effect_amount = 1

@@ -1,10 +1,13 @@
 [gd_resource type="Resource" script_class="CardData" format=3 uid="uid://d1p40oe6y6vu6"]
 
 [ext_resource type="Script" uid="uid://cclp6ov8d68s" path="res://scripts/card_data.gd" id="1"]
+[ext_resource type="Resource" path="res://data/resources/fish.tres" id="2"]
 
 [resource]
 script = ExtResource("1")
 card_name = "Fishery"
-body = "Harvest fish and seafood."
+body = "Builds on Oceanic. Mints Fish on placement."
 card_types = Array[String](["building", "fishery"])
 can_stack = Array[String](["planet"])
+can_stack_any = Array[String](["Oceanic"])
+spawns_on_placement = Array[ExtResource("1")]([ExtResource("2")])

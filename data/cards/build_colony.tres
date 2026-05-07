@@ -1,12 +1,14 @@
 [gd_resource type="Resource" script_class="CardData" format=3 uid="uid://ml3nunaviq3f"]
 
 [ext_resource type="Script" uid="uid://cclp6ov8d68s" path="res://scripts/card_data.gd" id="1"]
+[ext_resource type="Resource" uid="uid://b5cglkbivucnt" path="res://data/cards/discover.tres" id="2"]
 
 [resource]
 script = ExtResource("1")
 card_name = "Colony"
-body = "Build on a planet.
+body = "Build on a planet. Mints Discover on placement.
 
 Every 5 turns, draft a card."
 card_types = Array[String](["colony", "building"])
 can_stack = Array[String](["planet"])
+spawns_on_placement = Array[ExtResource("1")]([ExtResource("2")])

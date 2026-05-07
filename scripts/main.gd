@@ -3,16 +3,13 @@ extends Node2D
 # Game flow controller. Owns:
 #   - turn-phase state machine (DRAW → PLAY → END_TURN)
 #   - card play dispatch via the can_stack tag system
+#   - threshold-play effects (exile, generic effect dispatcher, synergy triggers)
+#   - the discovery pool (planets + stars revealed by playing Discover)
+#   - per-turn journal entry fly-in from off-screen right
 #
-# All persistent run state lives in `GameState` (autoload). The board state
-# (cells, stacks) lives in the play_space scene tree — walk that when you
-# need to query what's on the board.
-#
-# NOTE — events: A per-turn random EVENT phase used to live here (Meteor
-# Strike, etc.). It was stripped during the v0 simplification. When the systems
-# mature we want events back: a phase slot before DRAW, a small library of
-# effects keyed by tags on planets and buildings, and the EventCard banner
-# (still in res://scenes/) reused as the announcement visual.
+# Persistent run state lives in `GameState` (autoload). Board state (cells,
+# stacks) lives in the play_space scene tree — walk that when you need to
+# query what's on the board.
 
 const CARD_SCENE := preload("res://scenes/card.tscn")
 const CARD_BACK_SCENE := preload("res://scenes/card_back.tscn")
@@ -23,11 +20,12 @@ const TURN_DRAW_COUNT := 5
 const DRAW_STAGGER_SEC := 0.12
 const DISCARD_STAGGER_SEC := 0.06
 
-# Colonies open a draft pack of `COLONY_DRAFT_PACK_SIZE` cards every
-# `COLONY_DRAFT_INTERVAL` turns of their life. Picked card lands in the
-# discard pile.
+# Drafts: colonies open every 5 turns, other buildings (incl. synergy)
+# every 10 turns. Picked card lands in discard.
 const COLONY_DRAFT_INTERVAL := 5
 const COLONY_DRAFT_PACK_SIZE := 3
+const BUILDING_DRAFT_INTERVAL := 10
+const BUILDING_DRAFT_PACK_SIZE := 3
 
 const RESHUFFLE_STAGGER := 0.05
 const RESHUFFLE_FLY_DURATION := 0.5
@@ -41,32 +39,97 @@ const SHOWCASE_SLOT_SPACING := 110.0
 # the run without needing any lookup.
 const CARD_LIBRARY: CardLibrary = preload("res://data/card_library.tres")
 const CARD_BUILD_COLONY: CardData = preload("res://data/cards/build_colony.tres")
+const CARD_DISCOVER: CardData = preload("res://data/cards/discover.tres")
 const CARD_CONTACT: CardData = preload("res://data/cards/contact.tres")
 
 var STARTING_DECK: Array[CardData] = [
 	CARD_BUILD_COLONY,
+	CARD_DISCOVER,
+	CARD_DISCOVER,
 ]
 
-# Planet pool lives in data/planet_library.tres — add/edit planet defs there.
-# Each entry is a CardData with the "planet" tag and a populated planet_type.
+# Authored planet pool lives in data/planet_library.tres. The discovery pool
+# is seeded from this plus EXTRA_PLANETS (procedural) plus a 5% sprinkling
+# of stars.
 const PLANET_LIBRARY: PlanetLibrary = preload("res://data/planet_library.tres")
 
-# Discovery deck composition. Per turn we pop the top of GameState.planet_deck_data
-# and dispatch by tag: "journal" entries stack onto the board's Journal anchor;
-# everything else (planets, alien ships) settles into a free play-space cell.
-# Journal entries dominate by count to give the deck its narrative texture.
-#
-# Journal text is loaded from a sidecar file and revealed in strict sequential
-# order, regardless of where the journal-entry cards land in the shuffled
-# discovery deck. The cards seeded into the deck are anonymous placeholders;
-# their body is assigned at reveal time from `_journal_entries[_next_journal_index]`.
-const JOURNAL_ENTRIES_PATH := "res://data/journal_entries.txt"
-const ALIEN_SHIP_NAMES: Array[String] = [
+# Procedural planets to top up the discovery pool. [name, types[]].
+const EXTRA_PLANETS: Array = [
+	["Cinder Reach", ["Rocky"]],
+	["Verdant", ["Rocky"]],
+	["Solace", ["Rocky", "Oceanic"]],
+	["Marrowfell", ["Rocky"]],
+	["Greythorne", ["Rocky", "Ice"]],
+	["Brackwater", ["Oceanic"]],
+	["Coral Drift", ["Oceanic"]],
+	["Tidal Cradle", ["Oceanic", "Ice"]],
+	["Reefhold", ["Oceanic"]],
+	["Saltspire", ["Oceanic", "Rocky"]],
+	["Whitebrim", ["Ice"]],
+	["Rimepeak", ["Ice", "Rocky"]],
+	["Hoarfrost", ["Ice"]],
+	["Snowgale", ["Ice"]],
+	["Glasspane", ["Ice", "Oceanic"]],
+	["Stormcradle", ["Gas Giant"]],
+	["Aetherwind", ["Gas Giant"]],
+	["Thalassara", ["Gas Giant", "Ice"]],
+	["Cyclonis", ["Gas Giant"]],
+	["Hexavault", ["Gas Giant"]],
+	["Wraithdust", ["Rocky", "Ice"]],
+	["Pyrelands", ["Rocky"]],
+	["Embergloom", ["Rocky"]],
+	["Glasshollow", ["Rocky", "Ice"]],
+	["Ferralis", ["Rocky"]],
+	["Brinemarch", ["Oceanic"]],
+	["Black Mire", ["Oceanic", "Rocky"]],
+	["Aurora Bay", ["Oceanic", "Ice"]],
+	["Driftholm", ["Oceanic"]],
+	["Blue Veil", ["Oceanic", "Gas Giant"]],
+	["Frostgate", ["Ice"]],
+	["Glacier's Eye", ["Ice", "Oceanic"]],
+	["Stillpane", ["Ice"]],
+	["Cathedra", ["Ice", "Rocky"]],
+	["Snowhold", ["Ice"]],
+	["Vortexis", ["Gas Giant"]],
+	["Halcyon", ["Gas Giant", "Ice"]],
+	["Stormveil II", ["Gas Giant"]],
+	["Caelumar", ["Gas Giant"]],
+	["Maelstrome", ["Gas Giant", "Oceanic"]],
+	["Quietstone", ["Rocky"]],
+	["Cradle of Bones", ["Rocky"]],
+	["Hollow Moor", ["Rocky", "Ice"]],
+	["Dustbarrow", ["Rocky"]],
+	["Lumen", ["Rocky", "Ice"]],
+	["Aquanis", ["Oceanic"]],
+	["Cobalt Reach", ["Oceanic", "Rocky"]],
+	["Ven Tellaris", ["Rocky", "Oceanic"]],
+	["Argentum", ["Ice", "Rocky"]],
+	["Helica", ["Gas Giant"]],
+]
+
+const STAR_NAMES: Array = [
+	"Sol", "Helios", "Polaris", "Vega", "Sirius", "Antares", "Rigel", "Arcturus",
+]
+
+const ALIEN_SHIP_NAMES: Array = [
 	"Drifting Hulk",
 	"Silent Vessel",
+	"Ghost Sail",
+	"Wandering Echo",
+	"Cold Anchor",
 ]
+
+# Total worlds in the discovery pool (planets + stars combined).
+const TOTAL_DISCOVERY_WORLDS := 60
+const STAR_FRACTION := 0.05
+
+# Per-turn random alien-ship arrival.
+const ALIEN_SHIP_TURN_CHANCE := 0.04
+
 const HOMEWORLD_POSITION := Vector2(540, 220)
 const JOURNAL_POSITION := Vector2(140, 150)
+
+const JOURNAL_ENTRIES_PATH := "res://data/journal_entries.txt"
 
 enum Phase { DRAW, PLAY, END_TURN }
 
@@ -74,7 +137,6 @@ enum Phase { DRAW, PLAY, END_TURN }
 @onready var hand: Hand = $HandLayer/Hand
 @onready var discard: DiscardPile = $DiscardPile
 @onready var exile_pile: ExilePile = $ExilePile
-@onready var planet_deck: Deck = $PlanetDeck
 @onready var play_space: PlaySpace = $PlaySpace
 @onready var hud: Hud = $Hud
 @onready var end_turn_button: Button = $EndTurnButton
@@ -91,6 +153,10 @@ var _turn_transitioning: bool = false
 var _journal_entries: Array[String] = []
 var _next_journal_index: int = 0
 
+# Discovery pool — face-down planets + stars, popped one at a time when the
+# player plays a Discover. Stored as Array[CardData].
+var _discovery_pool: Array = []
+
 func _ready() -> void:
 	Engine.time_scale = TIME_SCALE
 	hand.card_played.connect(_on_card_played)
@@ -98,7 +164,9 @@ func _ready() -> void:
 	play_space.hand = hand
 	hand.hover_audio = card_hover_audio
 	play_space.hover_audio = card_hover_audio
-	play_space.set_planet_deck_position(planet_deck.global_position)
+	# Anchor where new worlds + journal entries fly in from — off-screen right.
+	var vp := get_viewport_rect().size
+	play_space.set_offscreen_origin(Vector2(vp.x + 200.0, 240.0))
 	end_turn_button.pressed.connect(_on_end_turn)
 	# Pile-viewer wiring: clicking any pile pops a viewer with its contents.
 	deck.pile_clicked.connect(_open_draw_pile_viewer)
@@ -123,64 +191,83 @@ func _init_game_state() -> void:
 	_journal_entries = _load_journal_entries()
 	_next_journal_index = 0
 
-	# Planets first: shuffled, with one rocky world reserved as the Homeworld.
-	# Duplicate so we can rename ours to "Homeworld" without mutating the .tres.
-	var planet_pool: Array[CardData] = []
+	# Build the planet pool: authored .tres planets + procedural extras.
+	# Duplicate so we can mutate (e.g. rename Homeworld) without touching .tres.
+	var planets: Array = []
 	for p in PLANET_LIBRARY.planets:
-		planet_pool.append(p.duplicate() as CardData)
-	planet_pool.shuffle()
+		planets.append(p.duplicate() as CardData)
+	for entry in EXTRA_PLANETS:
+		planets.append(_make_planet_card(entry[0], entry[1]))
+	planets.shuffle()
+
+	# Reserve a Rocky planet for Homeworld (rename + place).
 	var homeworld: CardData = null
-	for i in range(planet_pool.size()):
-		if planet_pool[i].planet_type == "Rocky":
-			homeworld = planet_pool[i]
-			planet_pool.remove_at(i)
+	for i in range(planets.size()):
+		if "Rocky" in planets[i].planet_types:
+			homeworld = planets[i]
+			planets.remove_at(i)
 			break
 	if homeworld == null:
-		homeworld = planet_pool.pop_front()
+		homeworld = planets.pop_front()
 	homeworld.card_name = "Homeworld"
 	play_space.place_card_immediate(homeworld, HOMEWORLD_POSITION)
 
-	# Journal: a single on-board card cards stack onto when journal entries are
-	# discovered. Modelled as a CardData with the "journal" tag so the existing
-	# stack/visual system carries it.
+	# Trim down to the configured planet count and add stars on top.
+	var star_count: int = int(round(TOTAL_DISCOVERY_WORLDS * STAR_FRACTION))
+	var planet_count: int = TOTAL_DISCOVERY_WORLDS - star_count
+	while planets.size() > planet_count:
+		planets.pop_back()
+	var stars: Array = []
+	for i in range(star_count):
+		var name: String = STAR_NAMES[i % STAR_NAMES.size()]
+		if i >= STAR_NAMES.size():
+			name = "%s %d" % [name, i / STAR_NAMES.size() + 1]
+		stars.append(_make_star_card(name))
+
+	_discovery_pool.clear()
+	for p in planets:
+		_discovery_pool.append(p)
+	for s in stars:
+		_discovery_pool.append(s)
+	_discovery_pool.shuffle()
+
+	# Place the journal anchor so journal entries have something to stack onto.
 	var journal := _make_journal_card()
 	play_space.place_card_immediate(journal, JOURNAL_POSITION)
 
-	# Discovery deck: planets + alien ships + journal entries (the bulk),
-	# shuffled together. Each turn the top is revealed and dispatched.
-	var discovery: Array = []
-	for p in planet_pool:
-		discovery.append(p)
-	for ship_name in ALIEN_SHIP_NAMES:
-		discovery.append(_make_alien_ship_card(ship_name))
-	for i in range(_journal_entries.size()):
-		discovery.append(_make_journal_entry_card())
-	discovery.shuffle()
-
-	GameState.planet_deck_data = discovery
-	planet_deck.cards_remaining = discovery.size()
 	deck.cards_remaining = GameState.player_deck.size()
 	discard.cards_remaining = 0
 	exile_pile.cards_remaining = 0
 
+func _make_planet_card(name: String, types: Array) -> CardData:
+	var cd := CardData.new()
+	cd.card_name = name
+	cd.card_types = ["planet"]
+	var typed: Array[String] = []
+	for t in types:
+		typed.append(String(t))
+	cd.planet_types = typed
+	return cd
+
+func _make_star_card(name: String) -> CardData:
+	var cd := CardData.new()
+	cd.card_name = name
+	cd.card_types = ["star"]
+	return cd
+
 func _make_journal_card() -> CardData:
-	# The board-card anchor for journal entries to stack onto.
 	var cd := CardData.new()
 	cd.card_name = "Journal"
 	cd.card_types = ["journal"]
 	return cd
 
 func _make_alien_ship_card(ship_name: String) -> CardData:
-	# Sits on the play space; the Contact card targets it via the "alien_ship" tag.
 	var cd := CardData.new()
 	cd.card_name = ship_name
 	cd.card_types = ["alien_ship"]
 	return cd
 
 func _make_journal_entry_card() -> CardData:
-	# Anonymous journal-entry slot for the discovery deck. The body is empty
-	# here — text is assigned at reveal time from the sequential journal-entry
-	# list, so entries stay in order even though the discovery deck is shuffled.
 	var cd := CardData.new()
 	cd.card_name = "Journal"
 	cd.body = ""
@@ -234,27 +321,26 @@ func _unhandled_input(event: InputEvent) -> void:
 func _run_draw_phase() -> void:
 	_set_phase(Phase.DRAW)
 	_age_buildings()
-	_discover_one()
+	_fly_in_journal_entry()
+	if randf() < ALIEN_SHIP_TURN_CHANCE:
+		_fly_in_alien_ship()
 	for i in range(TURN_DRAW_COUNT):
 		get_tree().create_timer(float(i) * DRAW_STAGGER_SEC).timeout.connect(_draw_one_card)
 	var draw_total: float = float(TURN_DRAW_COUNT - 1) * DRAW_STAGGER_SEC + 0.05
 	get_tree().create_timer(draw_total).timeout.connect(_clear_turn_transition)
 
-func _discover_one() -> void:
-	# Per-turn auto-discover: pop the top of the discovery deck and dispatch by
-	# tag. "journal" entries stack onto the on-board Journal card; everything
-	# else (planets, alien ships) settles into a free play-space cell.
-	if GameState.planet_deck_data.is_empty():
-		return
-	var entry: CardData = GameState.planet_deck_data.pop_back()
-	planet_deck.cards_remaining = GameState.planet_deck_data.size()
-	if "journal" in entry.card_types:
-		if _next_journal_index < _journal_entries.size():
-			entry.body = _journal_entries[_next_journal_index]
-			_next_journal_index += 1
-		play_space.emit_card_onto_stack(entry, "journal")
-	else:
-		play_space.emit_card_to_cell(entry)
+func _fly_in_journal_entry() -> void:
+	# Auto-arrival each turn, regardless of whether the player has a Discover.
+	# Text comes from the sequential journal_entries.txt file.
+	var entry := _make_journal_entry_card()
+	if _next_journal_index < _journal_entries.size():
+		entry.body = _journal_entries[_next_journal_index]
+		_next_journal_index += 1
+	play_space.emit_card_onto_stack(entry, "journal")
+
+func _fly_in_alien_ship() -> void:
+	var ship_name: String = ALIEN_SHIP_NAMES[randi() % ALIEN_SHIP_NAMES.size()]
+	play_space.emit_card_to_cell(_make_alien_ship_card(ship_name))
 
 func _clear_turn_transition() -> void:
 	_turn_transitioning = false
@@ -311,15 +397,37 @@ func _on_card_played(card: Card, target_card) -> void:
 	# Two play paths:
 	#   1. Stack — `target_card` is the topmost card whose stack accepted this
 	#      card's can_stack tags. The card is reparented under that stack's
-	#      leaf as a permanent visual (it does NOT enter discard).
+	#      leaf as a permanent visual; on placement we mint any
+	#      spawns_on_placement (resources, Discover) into discard.
 	#   2. Threshold — `target_card` is null. The card was released above the
-	#      hand threshold and goes to discard.
+	#      hand threshold. Routes to exile or discard, then runs effects:
+	#      its own effect_id (e.g. Discover), and any synergy triggers from
+	#      cards in play (only for resource plays).
 	if target_card != null:
 		GameState.total_buildings_placed += 1
 		play_space.attach_card_to_stack(card, target_card)
 		card_slap_audio.play()
+		_on_card_placed(card)
 		return
-	_send_card_to_discard(card)
+	var played_data: CardData = card.data
+	if played_data != null and played_data.exiles_on_play:
+		_send_card_to_exile(card)
+	else:
+		_send_card_to_discard(card)
+	if played_data != null:
+		_dispatch_play_effects(played_data)
+
+func _on_card_placed(card: Card) -> void:
+	# Mint any cards the building generates on placement (resources, Discover)
+	# into the discard pile. They cycle back to hand on the next reshuffle.
+	if card.data == null:
+		return
+	if card.data.spawns_on_placement.is_empty():
+		return
+	for spawn in card.data.spawns_on_placement:
+		if spawn != null:
+			GameState.player_discard.append(spawn)
+	discard.cards_remaining = GameState.player_discard.size()
 
 func _send_card_to_discard(card: Card) -> void:
 	GameState.player_discard.append(card.data)
@@ -330,6 +438,55 @@ func _send_card_to_exile(card: Card) -> void:
 	GameState.player_exile.append(card.data)
 	exile_pile.cards_remaining = GameState.player_exile.size()
 	_animate_play_to_pile(card, exile_pile.global_position)
+
+# ---------------------------------------------------------------------------
+# Effect dispatch
+#
+# Two rounds when a threshold-played card resolves:
+#   1) Run the card's own effect_id (Discover reveals a world; resources
+#      themselves usually have none).
+#   2) For resource plays specifically, walk every card in play and fire any
+#      whose triggers_on_play_tags overlaps with the played resource's tags.
+
+func _dispatch_play_effects(played_data: CardData) -> void:
+	_run_effect(played_data.effect_id, played_data.effect_amount, played_data.effect_payload)
+	if not ("resource" in played_data.card_types):
+		return
+	for c in play_space.all_cards():
+		if c.data == null:
+			continue
+		if c.data.triggers_on_play_tags.is_empty():
+			continue
+		for tag in c.data.triggers_on_play_tags:
+			if tag in played_data.card_types:
+				_run_effect(c.data.effect_id, c.data.effect_amount, c.data.effect_payload)
+				break
+
+func _run_effect(effect_id: String, amount: int, payload: CardData) -> void:
+	match effect_id:
+		"":
+			return
+		"draw":
+			for i in range(amount):
+				_draw_one_card()
+		"add_to_discard":
+			if payload != null:
+				for i in range(amount):
+					GameState.player_discard.append(payload)
+				discard.cards_remaining = GameState.player_discard.size()
+		"discover":
+			_discover_one_from_pool()
+		_:
+			push_warning("Unknown effect_id: %s" % effect_id)
+
+func _discover_one_from_pool() -> void:
+	if _discovery_pool.is_empty():
+		return
+	var entry: CardData = _discovery_pool.pop_back()
+	play_space.emit_card_to_cell(entry)
+
+# ---------------------------------------------------------------------------
+# Play-to-pile animation
 
 func _animate_play_to_pile(card: Card, target_world_pos: Vector2) -> void:
 	_showcasing.append(card)
@@ -347,8 +504,6 @@ func _on_showcase_done(card: Card) -> void:
 	var n := _showcasing.size()
 	for i in range(n):
 		_showcasing[i].update_showcase_target(_showcase_position(i, n))
-	# Counter only needs to disambiguate simultaneous showcases. Reset
-	# once the queue drains so it can't drift toward HOVER over a long run.
 	if n == 0:
 		_play_counter = 0
 
@@ -363,37 +518,72 @@ func _showcase_position(index: int, total: int) -> Vector2:
 	return center + Vector2(offset_x, 0.0)
 
 # ---------------------------------------------------------------------------
-# Colony draft — every COLONY_DRAFT_INTERVAL turns of a colony's life, the
-# player drafts one of COLONY_DRAFT_PACK_SIZE building cards into discard.
-#
-# Ageing happens at the start of the draw phase: every stacked card on the
-# board ticks turns_alive by 1, and any colony hitting a multiple of the
-# interval enqueues a draft request. Multiple colonies triggering the same
-# turn queue up FIFO inside the Draft autoload.
+# Building drafts — colonies every 5 turns of life, other buildings every 10.
+# Pool composition:
+#   - Colony pool: building cards (no synergy) + Discover + Contact (if a
+#     ship is on the board).
+#   - Non-colony building pool: synergy cards whose triggers_on_play_tags
+#     overlap with the building's produced-resource tags.
 
 func _age_buildings() -> void:
 	for c in play_space.all_cards():
-		# Roots are top-of-stack anchors (planet, journal, alien ship). Skip
-		# those — only stacked cards age.
+		# Roots are world anchors (planet, journal, alien_ship, star). Skip —
+		# only stacked cards age.
 		if not (c.get_parent() is Card):
 			continue
 		c.turns_alive += 1
-		if "colony" in c.card_types and c.turns_alive > 0 and c.turns_alive % COLONY_DRAFT_INTERVAL == 0:
-			Draft.request(_colony_draft_pool(), COLONY_DRAFT_PACK_SIZE, _on_colony_card_drafted, discard.global_position)
+		if c.data == null:
+			continue
+		var is_colony := "colony" in c.card_types
+		var is_synergy := "synergy" in c.card_types
+		var is_building := "building" in c.card_types
+		if is_colony and c.turns_alive > 0 and c.turns_alive % COLONY_DRAFT_INTERVAL == 0:
+			Draft.request(_colony_draft_pool(), COLONY_DRAFT_PACK_SIZE, _on_card_drafted, discard.global_position)
+		elif is_building and not is_colony and c.turns_alive > 0 and c.turns_alive % BUILDING_DRAFT_INTERVAL == 0:
+			var pool := _building_draft_pool(c.data)
+			if not pool.is_empty():
+				Draft.request(pool, BUILDING_DRAFT_PACK_SIZE, _on_card_drafted, discard.global_position)
 
 func _colony_draft_pool() -> Array:
-	# All cards in the library tagged `building`, plus Contact whenever an alien
-	# ship is on the play space. Built fresh each draft so a ship that lands
-	# between drafts becomes immediately reachable on the next colony tick.
 	var pool: Array = []
 	for c in CARD_LIBRARY.cards:
-		if "building" in c.card_types:
+		if "building" in c.card_types and not ("synergy" in c.card_types):
 			pool.append(c)
 	if play_space.has_card_with_tag("alien_ship"):
 		pool.append(CARD_CONTACT)
+	pool.append(CARD_DISCOVER)
 	return pool
 
-func _on_colony_card_drafted(chosen: CardData) -> void:
+func _building_draft_pool(building_data: CardData) -> Array:
+	# Specialty tags = the building's produced-resource tags (resource buildings)
+	# OR its own triggers_on_play_tags (synergy buildings). Pool = synergy cards
+	# whose triggers_on_play_tags overlap with the specialty tags. Excludes
+	# the building itself.
+	var specialty: Array = []
+	for spawn in building_data.spawns_on_placement:
+		if spawn == null:
+			continue
+		for t in spawn.card_types:
+			if not (t in specialty):
+				specialty.append(t)
+	for t in building_data.triggers_on_play_tags:
+		if not (t in specialty):
+			specialty.append(t)
+	if specialty.is_empty():
+		return []
+	var pool: Array = []
+	for c in CARD_LIBRARY.cards:
+		if c == building_data:
+			continue
+		if not ("synergy" in c.card_types):
+			continue
+		for tag in c.triggers_on_play_tags:
+			if tag in specialty:
+				pool.append(c)
+				break
+	return pool
+
+func _on_card_drafted(chosen: CardData) -> void:
 	if chosen == null:
 		return
 	GameState.player_discard.append(chosen)
@@ -427,7 +617,7 @@ func _on_pile_viewer_dismissed() -> void:
 	hand.input_paused = false
 
 # ---------------------------------------------------------------------------
-# Reshuffle (discard → deck) cosmetic animation, reused verbatim.
+# Reshuffle (discard → deck) cosmetic animation.
 
 func _animate_reshuffle(count: int) -> void:
 	var n: int = mini(count, RESHUFFLE_MAX_VISIBLE)
